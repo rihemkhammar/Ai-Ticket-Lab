@@ -1,0 +1,37 @@
+server:
+  port: 8081
+app:
+  ai:
+    provider: vertex #or any other AI provider
+spring:
+  application:
+    name: genai-java-spring
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: llama-3.3-70b-versatile #gpt-4o
+    openrouter:
+      api-key: ${OPENROUTER_API_KEY}
+      base-url: https://openrouter.ai/api
+      model: nex-agi/nex-n2-pro:free
+    vertex:
+      ai:
+        gemini:
+          project-id: my-genai-project-123
+          location: us-central1
+          chat:
+            options:
+              model: gemini-2.0-flash
+
+
+
+
+
+  logging:
+    level:
+      root: INFO
+      com.genai.java.spring: INFO
+      arg.springframwoek.ai: INFO
+
