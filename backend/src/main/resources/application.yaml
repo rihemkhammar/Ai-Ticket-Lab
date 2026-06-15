@@ -2,7 +2,7 @@ server:
   port: 8081
 app:
   ai:
-    provider: vertex #or any other AI provider
+    provider: openai #or any other AI provider
 spring:
   application:
     name: genai-java-spring
@@ -24,6 +24,24 @@ spring:
           chat:
             options:
               model: gemini-2.0-flash
+
+    huggingface:
+      chat:
+        api-key: ${HUGGINGFACE_API_KEY}
+        url: https://n7fadgaq8kbrw1n0.us-east-1.aws.endpoints.huggingface.cloud
+        options:
+          model: Qwen/Qwen2.5-Coder-7B-Instruct
+          max-new-tokens: 1024
+          temperature: 0.7
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: customer-mistral-model:latest
+          #max-new-tokens: 512
+          #temperature: 0.7
+
+
 
 
 

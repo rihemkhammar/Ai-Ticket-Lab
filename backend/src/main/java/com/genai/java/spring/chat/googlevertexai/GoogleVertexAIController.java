@@ -2,6 +2,7 @@ package com.genai.java.spring.chat.googlevertexai;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,7 +18,7 @@ public class GoogleVertexAIController {
             "Keep explanations concise, clear, and technical.";
     private final ChatClient chatClient;
 
-    public GoogleVertexAIController(ChatClient chatClient){
+    public GoogleVertexAIController(@Qualifier("vertexAIChatClient") ChatClient chatClient){
         this.chatClient = chatClient;
     }
     @PostMapping("/generate-java-docs")

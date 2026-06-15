@@ -1,6 +1,7 @@
 package com.genai.java.spring.chat.openrouter;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -17,7 +18,7 @@ public class OpenRouterChatController {
     private final ChatClient chatClient;
     private final OpenRouterService openRouterService;
 
-    public OpenRouterChatController(ChatClient chatClient, OpenRouterService openRouterService) {
+    public OpenRouterChatController(@Qualifier("openRouterChatClient") ChatClient chatClient, OpenRouterService openRouterService) {
         this.chatClient = chatClient;
         this.openRouterService = openRouterService;
     }
