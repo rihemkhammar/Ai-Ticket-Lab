@@ -7,11 +7,16 @@ spring:
   application:
     name: genai-java-spring
   ai:
+    docker-runner:
+      api-key: dunny-string
+      base-url: http://localhost:12434/engines/llama.cpp
+      model: ai/smollm2
     openai:
       api-key: ${OPENAI_API_KEY}
+      base-url: https://api.groq.com/openai/v1/chat/completions
       chat:
         options:
-          model: llama-3.3-70b-versatile #gpt-4o
+          model: openai/gpt-oss-20b #gpt-4o
     openrouter:
       api-key: ${OPENROUTER_API_KEY}
       base-url: https://openrouter.ai/api

@@ -21,6 +21,7 @@ public class AIProviderConfig {
         return ChatClient.builder(openAiChatModel).build();
     }
 
+
     @Bean("vertexAIChatClient")
     ChatClient vertexAIChatClient(VertexAiGeminiChatModel vertexAiGeminiChatModel) {
         return ChatClient.builder(vertexAiGeminiChatModel).build();
@@ -29,6 +30,7 @@ public class AIProviderConfig {
     ChatClient huggingFaceChatClient(HuggingfaceChatModel huggingFaceChatModel) {
         return ChatClient.builder(huggingFaceChatModel).build();
     }
+
 
     @Bean("openRouterChatClient")
     ChatClient openRouterChatClient(
@@ -58,5 +60,29 @@ public class AIProviderConfig {
         return ChatClient.builder(ollamaChatModel).build();
 
     }
+    @Bean("dockerRunnerChatClient")
+    ChatClient dockerRunnerChatClient(
+            @Value("${spring.ai.docker-runner.api-key}") String apiKey,
+            @Value("${spring.ai.docker-runner.base-url}") String baseUrl,
+            @Value("${spring.ai.docker-runner.model}") String model) {
 
-}
+        OpenAiApi dockerRunnerApi = OpenAiApi.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .build();
+
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model(model)
+                .build();
+
+        OpenAiChatModel chatModel = OpenAiChatModel.builder()
+                .openAiApi(dockerRunnerApi)
+                .defaultOptions(options)
+                .build();
+
+        return ChatClient.builder(chatModel).build();
+    }
+
+
+
+    }
