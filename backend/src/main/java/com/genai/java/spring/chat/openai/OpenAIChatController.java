@@ -2,13 +2,16 @@ package com.genai.java.spring.chat.openai;
 
 
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.ChatClientRequest;
-import org.springframework.ai.chat.client.ChatClientResponse;
+
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+import org.springframework.http.MediaType;
+
+
 @RestController
 @RequestMapping("/api/openai/chat")
 public class OpenAIChatController {
@@ -33,6 +36,15 @@ public class OpenAIChatController {
                 .system(SYSTEM_PROMPT)
                 .user(message)
                 .call()
+                .content();
+
+    }
+    @PostMapping(value = "/summarize-with-streaming", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> sumarizeWithStreaming(@RequestBody String message){
+        return chatClient.prompt()
+                .system(SYSTEM_PROMPT)
+                .user(message)
+                .stream()
                 .content();
 
     }

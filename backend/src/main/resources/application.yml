@@ -3,9 +3,31 @@ server:
 app:
   ai:
     provider: openai #or any other AI provider
+  jwt:
+    secret: "K9x2mL0pQ7rmZ8vN3sT6uR1cB4dE5fG2hJ8kP"
+    expiration-ms: 86400000
 spring:
   application:
     name: genai-java-spring
+  # ── DataSource ───────────────────────────────────────────
+  datasource:
+    url: jdbc:postgresql://localhost:5432/maintenance_ai
+    username: maintenance_ai
+    password: maintenance_ai
+    driver-class-name: org.postgresql.Driver
+  # ── JPA ─────────────────────────────────────────────────
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+  # ── Flyway ──────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+# ── Spring AI ───────────────────────────────────────────
+
   ai:
     docker-runner:
       api-key: dunny-string
@@ -46,15 +68,11 @@ spring:
           #max-new-tokens: 512
           #temperature: 0.7
 
-
-
-
-
-
+# ── Logging ─────────────────────────────────────────────
 
   logging:
     level:
       root: INFO
       com.genai.java.spring: INFO
       arg.springframwoek.ai: INFO
-
+      org.springframework.security: TRACE

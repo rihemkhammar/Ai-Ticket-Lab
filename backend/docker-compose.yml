@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: maintenance-ai-postgres
+    environment:
+      POSTGRES_DB: maintenance_ai
+      POSTGRES_USER: maintenance_ai
+      POSTGRES_PASSWORD: maintenance_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maintenance_ai -d maintenance_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
