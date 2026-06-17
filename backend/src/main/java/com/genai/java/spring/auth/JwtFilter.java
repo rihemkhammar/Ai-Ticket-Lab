@@ -39,6 +39,11 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         String token = authHeader.substring(7);
+        System.out.println(">>> RAW authHeader: [" + authHeader + "]");
+        System.out.println(">>> token length: " + token.length());
+        System.out.println(">>> token contains space: " + token.contains(" "));
+        System.out.println(">>> token: [" + token + "]");
+
         String username = jwtConfig.extractUsername(token);
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {

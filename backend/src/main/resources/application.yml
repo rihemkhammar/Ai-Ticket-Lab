@@ -35,7 +35,7 @@ spring:
       model: ai/smollm2
     openai:
       api-key: ${OPENAI_API_KEY}
-      base-url: https://api.groq.com/openai/v1/chat/completions
+      base-url: https://openrouter.ai/api
       chat:
         options:
           model: openai/gpt-oss-20b #gpt-4o

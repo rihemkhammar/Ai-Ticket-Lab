@@ -1,0 +1,3 @@
+npm install d3-geo topojson-client world-atlas
+npm install d3
+npm install lucide-react
