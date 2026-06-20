@@ -27,8 +27,8 @@ public class AiReviewValidator {
         if (isBlank(response.getDraftResponse())) {
             return ValidationResult.invalid("Draft response must not be blank.");
         }
-        if (response.getConfidence() == null || response.getConfidence() < 0.0 || response.getConfidence() > 1.0) {
-            return ValidationResult.invalid("Confidence must be between 0.0 and 1.0.");
+        if (response.getConfidence() == null) {
+            return ValidationResult.invalid("Confidence must be LOW, MEDIUM, or HIGH.");
         }
         return ValidationResult.valid();
     }

@@ -128,35 +128,35 @@ export const isAuthenticated = () => {
 
 // Tickets 
 
-// GET /tickets — liste tous les tickets (Technicien + Admin)
+// GET /api/tickets — liste tous les tickets (Technicien + Admin)
 export const getAllTickets = async () => {
-  const response = await api.get("/tickets");
+  const response = await api.get("/api/tickets");
   return response.data;
 };
 
-// GET /tickets/:id — détail d'un ticket (Technicien + Admin)
+// GET /api/tickets/:id — détail d'un ticket (Technicien + Admin)
 export const getTicketById = async (id) => {
-  const response = await api.get(`/tickets/${id}`);
+  const response = await api.get(`/api/tickets/${id}`);
   return response.data;
 };
 
-// POST /tickets — créer un ticket (utilisateur connecté)
+// POST /api/tickets — créer un ticket (utilisateur connecté)
 // body: { title: string, description: string }
 export const createTicket = async ({ title, description }) => {
-  const response = await api.post("/tickets", { title, description });
+  const response = await api.post("/api/tickets", { title, description });
   return response.data;
 };
 
-// PATCH /tickets/:id — changer le statut d'un ticket (Technicien + Admin)
+// PATCH /api/tickets/:id — changer le statut d'un ticket (Technicien + Admin)
 // status: "OPEN" | "IN_PROGRESS" | "CLOSED"
 export const updateTicketStatus = async (id, status) => {
-  const response = await api.patch(`/tickets/${id}`, { status });
+  const response = await api.patch(`/api/tickets/${id}`, { status });
   return response.data;
 };
 
 // AI Review
 export const runAiReview = async (ticketId) => {
-  const response = await api.post(`/tickets/${ticketId}/ai-review/basic`);
+  const response = await api.post(`/api/tickets/${ticketId}/ai-review/basic`);
   return response.data;
 };
 

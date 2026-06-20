@@ -150,7 +150,7 @@ public class AiReviewService {
                 possibleCauses
                 recommendedChecks
                 draftResponse
-                confidence
+                confidence (must be exactly one of these three strings: "LOW", "MEDIUM", "HIGH" - no numbers, no other words, no explanation)
                 """.formatted(title, description);
     }
 

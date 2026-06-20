@@ -3,6 +3,12 @@ import { TbRefresh, TbCircleCheck, TbBrain } from 'react-icons/tb';
 import { STATUS_CONFIG } from './Ticketconstants';
 import { updateTicketStatus, runAiReview } from '../../services/api';
 
+const CONFIDENCE_CONFIG = {
+  LOW:    { label: 'Low',    color: '#f87171' },
+  MEDIUM: { label: 'Medium', color: '#facc15' },
+  HIGH:   { label: 'High',   color: '#4ade80' },
+};
+
 export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) {
   const [aiResult, setAiResult] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -173,8 +179,11 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
             {/* Confidence */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Confidence</span>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#a78bfa' }}>
-                {Math.round(aiResult.result.confidence * 100)}%
+              <span style={{
+                fontSize: '13px', fontWeight: 700,
+                color: CONFIDENCE_CONFIG[aiResult.result.confidence]?.color ?? '#a78bfa',
+              }}>
+                {CONFIDENCE_CONFIG[aiResult.result.confidence]?.label ?? aiResult.result.confidence}
               </span>
             </div>
           </div>

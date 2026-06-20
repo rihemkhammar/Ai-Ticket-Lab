@@ -2,7 +2,6 @@ package com.genai.java.spring.aireview;
 
 import com.genai.java.spring.aireview.dto.AiReviewApiResponse;
 import com.genai.java.spring.aireview.dto.ErrorResponse;
-import com.genai.java.spring.ticket.TicketNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -13,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/tickets")
+@RequestMapping("/api/tickets")
 public class AiReviewController {
 
     private final AiReviewService service;
@@ -29,11 +28,6 @@ public class AiReviewController {
         return ResponseEntity.ok(response);
     }
 
-    @ExceptionHandler(TicketNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleTicketNotFound(TicketNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ErrorResponse("Ticket not found."));
-    }
 
     @ExceptionHandler(AiReviewProviderException.class)
     public ResponseEntity<ErrorResponse> handleProviderFailure(AiReviewProviderException ex) {

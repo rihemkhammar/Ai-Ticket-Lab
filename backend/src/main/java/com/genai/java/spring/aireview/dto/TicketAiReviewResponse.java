@@ -8,7 +8,7 @@ public class TicketAiReviewResponse {
     private List<String> possibleCauses;
     private List<String> recommendedChecks;
     private String draftResponse;
-    private Double confidence;
+    private Confidence confidence;
 
     public String getSummary()                         { return summary; }
     public void setSummary(String summary)              { this.summary = summary; }
@@ -22,6 +22,6 @@ public class TicketAiReviewResponse {
     public String getDraftResponse()                    { return draftResponse; }
     public void setDraftResponse(String v)              { this.draftResponse = v; }
 
-    public Double getConfidence()        { return confidence; }
-    public void setConfidence(Double v)  { this.confidence = v; }
+    public Confidence getConfidence()        { return confidence; }
+    public void setConfidence(Confidence v)  { this.confidence = v; }
 }
