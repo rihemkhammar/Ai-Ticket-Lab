@@ -184,6 +184,26 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
               </p>
             </Section>
 
+            {/* Limitations */}
+            {aiResult.result.limitations?.length > 0 && (
+              <Section title="Limitations">
+                <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                  {aiResult.result.limitations.map((l, i) => (
+                    <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{l}</li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+
+            {/* Avertissement humain */}
+            {aiResult.result.needsHumanReview && (
+              <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(250,204,21,0.1)', border: '1px solid rgba(250,204,21,0.3)', borderRadius: '12px' }}>
+                <span style={{ fontSize: '13px', color: '#facc15' }}>
+                  ⚠ AI output is advisory. Human review is required before taking action.
+                </span>
+              </div>
+            )}
+
             {/* Confidence */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Confidence</span>

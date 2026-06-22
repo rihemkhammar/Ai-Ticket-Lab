@@ -49,11 +49,8 @@ class AiReviewServiceTest {
         userRepository = mock(UserRepository.class);
         repository = mock(AiReviewRepository.class);
 
-        AiReviewValidator validator = new AiReviewValidator(); // vrai validator, sans dépendance
         ObjectMapper objectMapper = new ObjectMapper();
 
-        service = new AiReviewService(
-                chatClient, ticketService, userRepository, validator, repository, objectMapper);
 
         ticket = new Ticket();
         ticket.setTitle("Conveyor motor overheating");

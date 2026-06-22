@@ -1,7 +1,14 @@
 package com.genai.java.spring.aireview.dto;
 
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+
 import java.util.List;
 
+@Getter
+@Setter
+@ToString
 public class TicketAiReviewResponse {
 
     private String summary;
@@ -10,18 +17,7 @@ public class TicketAiReviewResponse {
     private String draftResponse;
     private Confidence confidence;
 
-    public String getSummary()                         { return summary; }
-    public void setSummary(String summary)              { this.summary = summary; }
-
-    public List<String> getPossibleCauses()             { return possibleCauses; }
-    public void setPossibleCauses(List<String> v)       { this.possibleCauses = v; }
-
-    public List<String> getRecommendedChecks()          { return recommendedChecks; }
-    public void setRecommendedChecks(List<String> v)    { this.recommendedChecks = v; }
-
-    public String getDraftResponse()                    { return draftResponse; }
-    public void setDraftResponse(String v)              { this.draftResponse = v; }
-
-    public Confidence getConfidence()        { return confidence; }
-    public void setConfidence(Confidence v)  { this.confidence = v; }
+    // Phase 4 — Section 9
+    private List<String> limitations;
+    private Boolean needsHumanReview;
 }

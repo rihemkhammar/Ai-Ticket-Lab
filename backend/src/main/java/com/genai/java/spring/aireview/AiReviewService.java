@@ -1,96 +1,96 @@
 package com.genai.java.spring.aireview;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.genai.java.spring.aireview.advisor.AiReviewAdvisorChain;
+import com.genai.java.spring.aireview.advisor.AiReviewContext;
 import com.genai.java.spring.aireview.dto.AiReviewApiResponse;
 import com.genai.java.spring.aireview.dto.TicketAiReviewResponse;
 import com.genai.java.spring.ticket.Ticket;
 import com.genai.java.spring.ticket.TicketService;
 import com.genai.java.spring.user.User;
 import com.genai.java.spring.user.UserRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
+@Slf4j
 @Service
 public class AiReviewService {
 
-    private static final String PROMPT_VERSION = "ticket-basic-review-v1";
     private static final String MODEL_NAME = "gpt-4o-mini";
-
-    private static final String SYSTEM_PROMPT = """
-            You are an AI maintenance assistant.
-            You help technicians understand maintenance tickets.
-            You may summarize the issue, suggest possible causes, recommend checks, and draft a response.
-            Do not claim that the ticket is officially resolved.
-            Return JSON only.
-            """;
 
     private final ChatClient chatClient;
     private final TicketService ticketService;
     private final UserRepository userRepository;
-    private final AiReviewValidator validator;
+    private final AiReviewAdvisorChain advisorChain;
     private final AiReviewRepository repository;
     private final ObjectMapper objectMapper;
 
     public AiReviewService(@Qualifier("openAIChatClient") ChatClient chatClient,
                            TicketService ticketService,
                            UserRepository userRepository,
-                           AiReviewValidator validator,
+                           AiReviewAdvisorChain advisorChain,
                            AiReviewRepository repository,
                            ObjectMapper objectMapper) {
         this.chatClient = chatClient;
         this.ticketService = ticketService;
         this.userRepository = userRepository;
-        this.validator = validator;
+        this.advisorChain = advisorChain;
         this.repository = repository;
         this.objectMapper = objectMapper;
     }
 
     public AiReviewApiResponse runReview(Long ticketId, String requesterUsername) {
-        // 1. Charger le ticket (404 si absent, géré par TicketService -> TicketNotFoundException)
         Ticket ticket = ticketService.findById(ticketId);
 
         User requester = userRepository.findByUsername(requesterUsername)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user not found."));
 
-        // 2. Construire le prompt
-        String userPrompt = buildUserPrompt(ticket.getTitle(), ticket.getDescription());
+        AiReviewContext context = new AiReviewContext(ticket, requester.getId(), requesterUsername);
 
-        // 3. Appeler GPT + parser directement en objet Java (entity() fait les deux)
+        // Phase 1 (prompt) + Phase 2 (défense injection)
+        advisorChain.runPreCall(context);
+
         TicketAiReviewResponse parsed;
         try {
             parsed = chatClient.prompt()
-                    .system(SYSTEM_PROMPT)
-                    .user(userPrompt)
+                    .system(context.getSystemPrompt())
+                    .user(context.getUserPrompt())
                     .call()
                     .entity(TicketAiReviewResponse.class);
-            System.out.println(">>> PARSED AI RESPONSE: " + parsed);
+            log.info("AI raw response parsed for ticketId={} -> {}", ticketId, parsed);
         } catch (Exception e) {
-            saveFailedReview(ticket.getId(), requester.getId(),
+            log.error("AI provider call failed for ticketId={}", ticketId, e);
+            saveFailedReview(ticket.getId(), requester.getId(), context.getPromptVersion(),
                     "AI provider failed or returned invalid output.");
             throw new AiReviewProviderException("AI call failed for ticket " + ticketId, e);
         }
 
-        // 4. Valider
-        AiReviewValidator.ValidationResult validation = validator.validate(parsed);
-        if (!validation.isValid()) {
-            saveFailedReview(ticket.getId(), requester.getId(), "AI returned invalid output.");
-            throw new AiReviewParsingException(validation.getErrorMessage());
+        context.setAiResponse(parsed);
+
+        // Phase 1 (structure) + Phase 4 (limitations / needsHumanReview)
+        advisorChain.runPostCall(context);
+
+        if (!context.isValid()) {
+            log.warn("AI review rejected for ticketId={} reasons={}", ticketId, context.getValidationErrors());
+            saveFailedReview(ticket.getId(), requester.getId(), context.getPromptVersion(), context.firstError());
+            throw new AiReviewParsingException(context.firstError());
         }
 
-        // 5. Stocker SUCCESS (transaction courte)
-        AiReview saved = saveSuccessReview(ticket.getId(), requester.getId(), parsed);
+        AiReview saved = saveSuccessReview(ticket.getId(), requester.getId(), context.getPromptVersion(), parsed);
 
         return toApiResponse(saved, parsed);
     }
 
-    private AiReview saveFailedReview(Long ticketId, java.util.UUID triggeredBy, String errorMessage) {
+    private AiReview saveFailedReview(Long ticketId, UUID triggeredBy, String promptVersion, String errorMessage) {
         AiReview review = new AiReview();
         review.setTicketId(ticketId);
         review.setTriggeredBy(triggeredBy);
-        review.setPromptVersion(PROMPT_VERSION);
+        review.setPromptVersion(promptVersion);
         review.setModelName(MODEL_NAME);
         review.setStatus(AiReviewStatus.FAILED);
         review.setErrorMessage(errorMessage);
@@ -98,18 +98,18 @@ public class AiReviewService {
         return repository.save(review);
     }
 
-    private AiReview saveSuccessReview(Long ticketId, java.util.UUID triggeredBy, TicketAiReviewResponse parsed) {
+    private AiReview saveSuccessReview(Long ticketId, UUID triggeredBy, String promptVersion, TicketAiReviewResponse parsed) {
         AiReview review = new AiReview();
         review.setTicketId(ticketId);
         review.setTriggeredBy(triggeredBy);
-        review.setPromptVersion(PROMPT_VERSION);
+        review.setPromptVersion(promptVersion);
         review.setModelName(MODEL_NAME);
         review.setStatus(AiReviewStatus.SUCCESS);
         review.setCreatedAt(LocalDateTime.now());
         try {
             review.setResultJson(objectMapper.writeValueAsString(parsed));
         } catch (Exception e) {
-            // Ne devrait pas arriver puisqu'on vient de parser cet objet
+            log.error("Failed to serialize AI response for ticketId={}", ticketId, e);
             review.setResultJson(null);
         }
         return repository.save(review);
@@ -126,21 +126,5 @@ public class AiReviewService {
         response.setErrorMessage(saved.getErrorMessage());
         response.setCreatedAt(saved.getCreatedAt());
         return response;
-    }
-
-    private String buildUserPrompt(String title, String description) {
-        return """
-                Review the following maintenance ticket.
-                Ticket title:
-                %s
-                Ticket description:
-                %s
-                Return JSON with:
-                summary
-                possibleCauses
-                recommendedChecks
-                draftResponse
-                confidence (must be exactly one of these three strings: "LOW", "MEDIUM", "HIGH" - no numbers, no other words, no explanation)
-                """.formatted(title, description);
     }
 }
