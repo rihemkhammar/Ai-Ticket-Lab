@@ -37,54 +37,31 @@ Le projet combine **Spring Boot**, **Spring AI**, **PostgreSQL** et **React** af
 
 * OpenAI API
 * GPT-4o-mini
-
+* Spring AI ChatClient (structured output + Advisors)
 ---
+## 🗺️ Roadmap des Stories
 
 ## 📖 Story S1 — AI-TRAIN-M1: GPT Review Foundation
 
-### Objectif
 
-Créer une application permettant à un utilisateur de soumettre un ticket de maintenance et de demander une analyse automatique par IA.
+**Objectif :** Créer la base de l'analyse IA de tickets de maintenance.
 
-Cette story constitue un environnement d'apprentissage destiné à comprendre l'intégration de l'IA dans une application Java moderne avant l'implémentation de fonctionnalités avancées prévues dans les futures versions du projet.
 
-### Fonctionnalités Utilisateur
 
-L'utilisateur peut :
 
-* Consulter la liste des tickets de maintenance
-* Afficher le détail d'un ticket
-* Lancer une analyse IA via le bouton **Run AI Review**
-* Recevoir une réponse structurée générée par GPT
-* Consulter l'historique des analyses réalisées
-
----
-
-## 📋 Roadmap du Milestone
+#### 📋 Roadmap du Milestone
 
 Le développement est découpé en trois phases.
 
-### Phase 0 — Setup du Projet
+**Phase 0 — Setup du Projet**
 
-* Initialisation Spring Boot
-* Initialisation React + Vite
-* Configuration PostgreSQL
-* Mise en place Docker
-* Configuration Flyway
+**Phase 1 — Première Intégration IA**
 
-### Phase 1 — Première Intégration IA
 
-* Création des tickets
-* Appel à OpenAI via Spring AI
-* Génération d'une analyse simple
 
-### Phase 2 — Analyse Structurée
+**Phase 2 — Analyse Structurée**
 
-* Structured Output
-* Validation des réponses IA
-* Advisors Spring AI
-* Gestion avancée des erreurs
-* Persistance des résultats
+
 
 
 ---
@@ -118,7 +95,33 @@ CREATE TABLE ai_review (
     created_at TIMESTAMP NOT NULL DEFAULT now()
 );
 ```
+---
+## 📖  Story S2 — AI-TRAIN-M2: Prompt Quality and Safety
 
+**Objectif :** Améliorer la qualité du prompt, défendre contre le prompt injection, et rendre les limitations IA visibles.
+
+
+#### 📋 Roadmap du Milestone
+
+Le développement est découpé en 4 phases.
+
+**Phase 1 — Prompt Engineering**
+
+
+**Phase 2 — Prompt Hacking & Defense**
+
+
+**Phase 3 — Learning Notes**
+
+
+**Phase 4 — LLM Limitations & Human Review**
+
+---
+
+## 🗄️ Database Migrations (Flyway)
+***📦 V3__seed_tickets.sql***
+
+***📦 V4__seed_prompt_injection_ticket.sql***
 
 ---
 
@@ -143,6 +146,53 @@ CREATE TABLE ai_review (
 ```
 
 ---
+ 
+## 📦 Structure Backend
+ 
+```
+## 📦 Structure Backend
+
+com.genai.java.spring
+├── GenaiJavaSpringApplication.java
+├── ticket
+│   ├── Ticket.java
+│   ├── TicketStatus.java
+│   ├── TicketRepository.java
+│   ├── TicketService.java
+│   └── TicketController.java
+├── aireview
+│   ├── AiReview.java
+│   ├── AiReviewStatus.java
+│   ├── AiReviewRepository.java
+│   ├── AiReviewService.java
+│   ├── AiReviewController.java
+│   ├── AiReviewParsingException.java
+│   ├── AiReviewProviderException.java
+│   ├── advisor
+│   │   ├── AiReviewAdvisor.java
+│   │   ├── AiReviewAdvisorChain.java
+│   │   ├── AiReviewContext.java
+│   │   ├── HumanReviewSafetyAdvisor.java
+│   │   ├── PromptInjectionDefenseAdvisor.java
+│   │   ├── StructuralValidationAdvisor.java
+│   │   └── SystemPromptAdvisor.java
+│   ├── dto
+│   │   ├── TicketAiReviewResponse.java
+│   │   ├── AiReviewApiResponse.java
+│   │   └── ErrorResponse.java
+│   └── prompt
+│       └── TicketReviewPromptBuilder.java
+├── auth
+│   └── (...)
+├── user
+│   └── (...)
+├── exception
+│   └── (...)
+└── config
+    └── ChatClientConfig.java
+```
+
+ 
 
 ## ▶️ Démarrage du Projet
 
@@ -187,10 +237,43 @@ npm run dev
 ```
 
 ---
+### Connexion Frontend → Backend
+ 
+Le frontend utilise un **proxy Vite** pour se connecter au backend :
+ 
+```javascript
+// vite.config.js
+server: {
+  proxy: {
+    "/api": "http://localhost:8080"
+  }
+}
+```
 
-## 📸 Capture d'écran
+---
+## 🔐 Authentification
 
-### AI Ticket Lab
+L'application utilise une authentification par **JWT (JSON Web Token)**.
+
+### Utilisateurs de test
+
+| Username | Password | Rôle |
+|----------|----------|------|
+| `demo_technician` | `pass123` | `TECHNICIAN` |
+
+---
+ 
+## 🔌 API Endpoints
+ 
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `GET` | `/api/tickets` | Liste tous les tickets |
+| `GET` | `/api/tickets/{ticketId}` | Détail d'un ticket |
+| `POST` | `/api/tickets/{ticketId}/ai-review/basic` | Lancer une analyse IA |
+ 
+ ---
+
+
 
 
 
