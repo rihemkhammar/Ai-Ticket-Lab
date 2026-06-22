@@ -58,39 +58,29 @@ public class AiReviewService {
         // 2. Construire le prompt
         String userPrompt = buildUserPrompt(ticket.getTitle(), ticket.getDescription());
 
-        // 3. Appeler GPT (hors transaction DB)
-        String rawContent;
+        // 3. Appeler GPT + parser directement en objet Java (entity() fait les deux)
+        TicketAiReviewResponse parsed;
         try {
-            rawContent = chatClient.prompt()
+            parsed = chatClient.prompt()
                     .system(SYSTEM_PROMPT)
                     .user(userPrompt)
                     .call()
-                    .content();
-            System.out.println(">>> RAW AI RESPONSE: " + rawContent);
+                    .entity(TicketAiReviewResponse.class);
+            System.out.println(">>> PARSED AI RESPONSE: " + parsed);
         } catch (Exception e) {
-            AiReview failed = saveFailedReview(ticket.getId(), requester.getId(),
-                    "AI provider failed. Please try again.");
-            throw new AiReviewProviderException("AI provider failed for ticket " + ticketId, e);
+            saveFailedReview(ticket.getId(), requester.getId(),
+                    "AI provider failed or returned invalid output.");
+            throw new AiReviewProviderException("AI call failed for ticket " + ticketId, e);
         }
 
-        // 4. Parser le JSON manuellement (Jackson)
-        TicketAiReviewResponse parsed;
-        try {
-            String cleaned = stripCodeFences(rawContent);
-            parsed = objectMapper.readValue(cleaned, TicketAiReviewResponse.class);
-        } catch (Exception e) {
-            saveFailedReview(ticket.getId(), requester.getId(), "AI returned invalid output.");
-            throw new AiReviewParsingException("Could not parse AI output for ticket " + ticketId, e);
-        }
-
-        // 5. Valider
+        // 4. Valider
         AiReviewValidator.ValidationResult validation = validator.validate(parsed);
         if (!validation.isValid()) {
             saveFailedReview(ticket.getId(), requester.getId(), "AI returned invalid output.");
             throw new AiReviewParsingException(validation.getErrorMessage());
         }
 
-        // 6. Stocker SUCCESS (transaction courte)
+        // 5. Stocker SUCCESS (transaction courte)
         AiReview saved = saveSuccessReview(ticket.getId(), requester.getId(), parsed);
 
         return toApiResponse(saved, parsed);
@@ -152,17 +142,5 @@ public class AiReviewService {
                 draftResponse
                 confidence (must be exactly one of these three strings: "LOW", "MEDIUM", "HIGH" - no numbers, no other words, no explanation)
                 """.formatted(title, description);
-    }
-
-    private String stripCodeFences(String raw) {
-        if (raw == null) return null;
-        String trimmed = raw.trim();
-        if (trimmed.startsWith("```")) {
-            trimmed = trimmed.replaceFirst("^```[a-zA-Z]*\\s*", "").trim();
-            if (trimmed.endsWith("```")) {
-                trimmed = trimmed.substring(0, trimmed.length() - 3).trim();
-            }
-        }
-        return trimmed;
     }
 }

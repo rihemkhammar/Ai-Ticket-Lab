@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TbRefresh, TbCircleCheck, TbBrain } from 'react-icons/tb';
 import { STATUS_CONFIG } from './Ticketconstants';
 import { updateTicketStatus, runAiReview } from '../../services/api';
@@ -13,6 +13,14 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
   const [aiResult, setAiResult] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
+
+  // Réinitialise l'état de l'AI Review à chaque changement de ticket,
+  // sinon le résultat du ticket précédent reste affiché.
+  useEffect(() => {
+    setAiResult(null);
+    setAiError(null);
+    setAiLoading(false);
+  }, [ticket?.id]);
 
   if (!ticket) return null;
 
