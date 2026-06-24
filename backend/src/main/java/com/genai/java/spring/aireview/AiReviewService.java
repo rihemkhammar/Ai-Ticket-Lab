@@ -21,7 +21,9 @@ import java.util.UUID;
 @Service
 public class AiReviewService {
 
-    private static final String MODEL_NAME = "gpt-4o-mini";
+    //private static final String MODEL_NAME = "gpt-4o-mini";
+    private static final String MODEL_NAME = "openai/gpt-oss-20b";
+
 
     private final ChatClient chatClient;
     private final TicketService ticketService;
