@@ -1,159 +1,30 @@
-2026-06-28 01:07:43 [background-preinit] INFO  traceId= spanId= o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.3.Final
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplication - Starting GenaiJavaSpringApplication using Java 25.0.3 with PID 46722 (/home/rihem/Fusa/Rihem-Training/backend/target/classes started by rihem in /home/rihem/Fusa/Rihem-Training/backend)
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplication - No active profile set, falling back to 1 default profile: "default"
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 80 ms. Found 5 JPA repository interfaces.
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8081 (http)
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= o.a.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8081"]
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= o.a.catalina.core.StandardService - Starting service [Tomcat]
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.55]
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
-2026-06-28 01:07:43 [main] INFO  traceId= spanId= o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 779 ms
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@785a4557
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= org.flywaydb.core.FlywayExecutor - Database: jdbc:postgresql://localhost:5432/maintenance_ai (PostgreSQL 16.14)
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.f.core.internal.command.DbValidate - Successfully validated 8 migrations (execution time 00:00.013s)
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Current version of schema "public": 4
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "5 - enable pgvector"
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "6 - create knowledge article"
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "7 - seed knowledge articles"
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Migrating schema "public" to version "8 - create semantic chunk"
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Successfully applied 4 migrations to schema "public", now at version v8 (execution time 00:00.052s)
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= org.hibernate.Version - HHH000412: Hibernate ORM core version 6.6.53.Final
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
-2026-06-28 01:07:44 [main] WARN  traceId= spanId= org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
-2026-06-28 01:07:44 [main] INFO  traceId= spanId= o.hibernate.orm.connections.pooling - HHH10001005: Database info:
-	Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
-	Database driver: undefined/unknown
-	Database version: 16.14
-	Autocommit mode: undefined/unknown
-	Isolation level: undefined/unknown
-	Minimum pool size: undefined/unknown
-	Maximum pool size: undefined/unknown
-2026-06-28 01:07:45 [main] INFO  traceId= spanId= o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
-2026-06-28 01:07:45 [main] INFO  traceId= spanId= o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
-2026-06-28 01:07:45 [main] INFO  traceId= spanId= c.g.j.s.a.a.AiReviewAdvisorChain - AiReviewAdvisorChain initialised — preCall=[SystemPromptAdvisor, PromptInjectionDefenseAdvisor] postCall=[StructuralValidationAdvisor, HumanReviewSafetyAdvisor]
-2026-06-28 01:07:45 [main] INFO  traceId= spanId= o.s.s.c.a.a.c.InitializeAuthenticationProviderBeanManagerConfigurer$InitializeAuthenticationProviderManagerConfigurer - Global AuthenticationManager configured with AuthenticationProvider bean with name authenticationProvider
-2026-06-28 01:07:45 [main] WARN  traceId= spanId= o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with an AuthenticationProvider bean. UserDetailsService beans will not be used by Spring Security for automatically configuring username/password login. Consider removing the AuthenticationProvider bean. Alternatively, consider using the UserDetailsService in a manually instantiated DaoAuthenticationProvider. If the current configuration is intentional, to turn off this warning, increase the logging level of 'org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer' to ERROR
-2026-06-28 01:07:45 [main] INFO  traceId= spanId= o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
-2026-06-28 01:07:45 [main] WARN  traceId= spanId= o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
-2026-06-28 01:07:46 [main] INFO  traceId= spanId= o.a.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8081"]
-2026-06-28 01:07:46 [main] INFO  traceId= spanId= o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8081 (http) with context path '/'
-2026-06-28 01:07:46 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplication - Started GenaiJavaSpringApplication in 3.182 seconds (process running for 3.423)
-2026-06-28 01:07:46 [main] INFO  traceId= spanId= c.g.j.spring.config.PgVectorConfig - pgvector configured for embedding dimension=384 (from app.rag.embedding-dimensions). Make sure this matches the 'vector(...)' size in V8__create_semantic_chunk.sql AND the dimensions actually returned by spring.ai.openai.embedding.options.model.
-2026-06-28 01:08:08 [SpringApplicationShutdownHook] INFO  traceId= spanId= o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
-2026-06-28 01:08:08 [tomcat-shutdown] INFO  traceId= spanId= o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
-2026-06-28 01:08:08 [SpringApplicationShutdownHook] INFO  traceId= spanId= o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
-2026-06-28 01:08:08 [SpringApplicationShutdownHook] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
-2026-06-28 01:08:08 [SpringApplicationShutdownHook] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
-2026-06-28 01:19:50 [background-preinit] INFO  traceId= spanId= o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.3.Final
-2026-06-28 01:19:50 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplicationTests - Starting GenaiJavaSpringApplicationTests using Java 25.0.3 with PID 52841 (started by rihem in /home/rihem/Fusa/Rihem-Training/backend)
-2026-06-28 01:19:50 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplicationTests - No active profile set, falling back to 1 default profile: "default"
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 96 ms. Found 5 JPA repository interfaces.
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@6bec566e
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= org.flywaydb.core.FlywayExecutor - Database: jdbc:postgresql://localhost:5432/maintenance_ai (PostgreSQL 16.14)
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= o.f.core.internal.command.DbValidate - Successfully validated 8 migrations (execution time 00:00.016s)
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Current version of schema "public": 8
-2026-06-28 01:19:51 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Schema "public" is up to date. No migration necessary.
-2026-06-28 01:19:52 [main] INFO  traceId= spanId= o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
-2026-06-28 01:19:52 [main] INFO  traceId= spanId= org.hibernate.Version - HHH000412: Hibernate ORM core version 6.6.53.Final
-2026-06-28 01:19:52 [main] INFO  traceId= spanId= o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
-2026-06-28 01:19:52 [main] INFO  traceId= spanId= o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
-2026-06-28 01:19:52 [main] WARN  traceId= spanId= org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
-2026-06-28 01:19:52 [main] INFO  traceId= spanId= o.hibernate.orm.connections.pooling - HHH10001005: Database info:
-	Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
-	Database driver: undefined/unknown
-	Database version: 16.14
-	Autocommit mode: undefined/unknown
-	Isolation level: undefined/unknown
-	Minimum pool size: undefined/unknown
-	Maximum pool size: undefined/unknown
-2026-06-28 01:19:52 [main] INFO  traceId= spanId= o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
-2026-06-28 01:19:52 [main] INFO  traceId= spanId= o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
-2026-06-28 01:19:53 [main] INFO  traceId= spanId= c.g.j.s.a.a.AiReviewAdvisorChain - AiReviewAdvisorChain initialised — preCall=[SystemPromptAdvisor, PromptInjectionDefenseAdvisor] postCall=[StructuralValidationAdvisor, HumanReviewSafetyAdvisor]
-2026-06-28 01:19:53 [main] INFO  traceId= spanId= o.s.s.c.a.a.c.InitializeAuthenticationProviderBeanManagerConfigurer$InitializeAuthenticationProviderManagerConfigurer - Global AuthenticationManager configured with AuthenticationProvider bean with name authenticationProvider
-2026-06-28 01:19:53 [main] WARN  traceId= spanId= o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with an AuthenticationProvider bean. UserDetailsService beans will not be used by Spring Security for automatically configuring username/password login. Consider removing the AuthenticationProvider bean. Alternatively, consider using the UserDetailsService in a manually instantiated DaoAuthenticationProvider. If the current configuration is intentional, to turn off this warning, increase the logging level of 'org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer' to ERROR
-2026-06-28 01:19:53 [main] INFO  traceId= spanId= o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
-2026-06-28 01:19:53 [main] WARN  traceId= spanId= o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
-2026-06-28 01:19:53 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplicationTests - Started GenaiJavaSpringApplicationTests in 3.296 seconds (process running for 4.873)
-2026-06-28 01:19:53 [main] INFO  traceId= spanId= c.g.j.spring.config.PgVectorConfig - pgvector configured for embedding dimension=384 (from app.rag.embedding-dimensions). Make sure this matches the 'vector(...)' size in V8__create_semantic_chunk.sql AND the dimensions actually returned by spring.ai.openai.embedding.options.model.
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=2
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=2 title=Pump chunks=1
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=2 chunksCreated=3
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Conveyor chunks=2
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=2 title=Sensor chunks=1
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=3 title=Safety chunks=3
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=3 chunksCreated=6
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=1
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=1 chunksCreated=1
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=1
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=1 chunksCreated=1
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=1
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=2 title=Pump chunks=1
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=2 chunksCreated=2
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=2
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=1 chunksCreated=2
-2026-06-28 01:19:54 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=0 chunksCreated=0
-2026-06-28 01:19:54 [SpringApplicationShutdownHook] INFO  traceId= spanId= o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
-2026-06-28 01:19:54 [SpringApplicationShutdownHook] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
-2026-06-28 01:19:54 [SpringApplicationShutdownHook] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
-2026-06-28 01:20:25 [background-preinit] INFO  traceId= spanId= o.h.validator.internal.util.Version - HV000001: Hibernate Validator 8.0.3.Final
-2026-06-28 01:20:25 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplicationTests - Starting GenaiJavaSpringApplicationTests using Java 25.0.3 with PID 53420 (started by rihem in /home/rihem/Fusa/Rihem-Training/backend)
-2026-06-28 01:20:25 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplicationTests - No active profile set, falling back to 1 default profile: "default"
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 102 ms. Found 5 JPA repository interfaces.
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@4351d055
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= org.flywaydb.core.FlywayExecutor - Database: jdbc:postgresql://localhost:5432/maintenance_ai (PostgreSQL 16.14)
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= o.f.core.internal.command.DbValidate - Successfully validated 8 migrations (execution time 00:00.016s)
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Current version of schema "public": 8
-2026-06-28 01:20:26 [main] INFO  traceId= spanId= o.f.core.internal.command.DbMigrate - Schema "public" is up to date. No migration necessary.
-2026-06-28 01:20:27 [main] INFO  traceId= spanId= o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
-2026-06-28 01:20:27 [main] INFO  traceId= spanId= org.hibernate.Version - HHH000412: Hibernate ORM core version 6.6.53.Final
-2026-06-28 01:20:27 [main] INFO  traceId= spanId= o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
-2026-06-28 01:20:27 [main] INFO  traceId= spanId= o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
-2026-06-28 01:20:27 [main] WARN  traceId= spanId= org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
-2026-06-28 01:20:27 [main] INFO  traceId= spanId= o.hibernate.orm.connections.pooling - HHH10001005: Database info:
-	Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
-	Database driver: undefined/unknown
-	Database version: 16.14
-	Autocommit mode: undefined/unknown
-	Isolation level: undefined/unknown
-	Minimum pool size: undefined/unknown
-	Maximum pool size: undefined/unknown
-2026-06-28 01:20:27 [main] INFO  traceId= spanId= o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
-2026-06-28 01:20:27 [main] INFO  traceId= spanId= o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
-2026-06-28 01:20:28 [main] INFO  traceId= spanId= c.g.j.s.a.a.AiReviewAdvisorChain - AiReviewAdvisorChain initialised — preCall=[SystemPromptAdvisor, PromptInjectionDefenseAdvisor] postCall=[StructuralValidationAdvisor, HumanReviewSafetyAdvisor]
-2026-06-28 01:20:28 [main] INFO  traceId= spanId= o.s.s.c.a.a.c.InitializeAuthenticationProviderBeanManagerConfigurer$InitializeAuthenticationProviderManagerConfigurer - Global AuthenticationManager configured with AuthenticationProvider bean with name authenticationProvider
-2026-06-28 01:20:28 [main] WARN  traceId= spanId= o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with an AuthenticationProvider bean. UserDetailsService beans will not be used by Spring Security for automatically configuring username/password login. Consider removing the AuthenticationProvider bean. Alternatively, consider using the UserDetailsService in a manually instantiated DaoAuthenticationProvider. If the current configuration is intentional, to turn off this warning, increase the logging level of 'org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer' to ERROR
-2026-06-28 01:20:28 [main] INFO  traceId= spanId= o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
-2026-06-28 01:20:28 [main] WARN  traceId= spanId= o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
-2026-06-28 01:20:28 [main] INFO  traceId= spanId= c.g.j.s.GenaiJavaSpringApplicationTests - Started GenaiJavaSpringApplicationTests in 3.445 seconds (process running for 4.914)
-2026-06-28 01:20:28 [main] INFO  traceId= spanId= c.g.j.spring.config.PgVectorConfig - pgvector configured for embedding dimension=384 (from app.rag.embedding-dimensions). Make sure this matches the 'vector(...)' size in V8__create_semantic_chunk.sql AND the dimensions actually returned by spring.ai.openai.embedding.options.model.
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=2
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=2 title=Pump chunks=1
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=2 chunksCreated=3
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Conveyor chunks=2
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=2 title=Sensor chunks=1
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=3 title=Safety chunks=3
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=3 chunksCreated=6
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=1
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=1 chunksCreated=1
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=1
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=1 chunksCreated=1
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=1
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=2 title=Pump chunks=1
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=2 chunksCreated=2
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexed articleId=1 title=Motor chunks=2
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=1 chunksCreated=2
-2026-06-28 01:20:29 [main] INFO  traceId= spanId= c.g.j.s.r.i.ArticleIndexingService - Indexing complete: articlesIndexed=0 chunksCreated=0
-2026-06-28 01:20:29 [SpringApplicationShutdownHook] INFO  traceId= spanId= o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
-2026-06-28 01:20:29 [SpringApplicationShutdownHook] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
-2026-06-28 01:20:29 [SpringApplicationShutdownHook] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-06-29 00:02:54 [http-nio-8081-exec-8] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:02:54 [http-nio-8081-exec-8] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:03:43 [http-nio-8081-exec-7] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:03:43 [http-nio-8081-exec-7] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:04:06 [http-nio-8081-exec-10] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:04:06 [http-nio-8081-exec-10] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:04:06 [http-nio-8081-exec-3] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:04:06 [http-nio-8081-exec-3] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:20:33 [http-nio-8081-exec-2] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:20:33 [http-nio-8081-exec-2] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:36:49 [http-nio-8081-exec-8] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:36:49 [http-nio-8081-exec-8] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:36:49 [http-nio-8081-exec-7] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:36:49 [http-nio-8081-exec-7] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:36:49 [http-nio-8081-exec-5] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:36:49 [http-nio-8081-exec-5] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:36:49 [http-nio-8081-exec-3] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - SQL Warning Code: 0, SQLState: 01000
+2026-06-29 00:36:49 [http-nio-8081-exec-3] WARN  traceId= spanId= o.h.e.jdbc.spi.SqlExceptionHelper - database "maintenance_ai" has a collation version mismatch
+2026-06-29 00:38:14 [http-nio-8081-exec-3] INFO  traceId= spanId= c.g.j.s.a.a.SystemPromptAdvisor - [SystemPromptAdvisor] ticketId=3 promptVersion=ticket-basic-review-v2
+2026-06-29 00:38:30 [http-nio-8081-exec-3] INFO  traceId= spanId= c.g.j.s.aireview.AiReviewService - AI raw response parsed for ticketId=3 -> TicketAiReviewResponse(summary=The packaging machine's sensor is providing inconsistent readings, indicating a potential issue with sensor reliability or external interference., possibleCauses=[Loose or damaged connection, Sensor contamination or fouling, Power supply instability, Mechanical vibration affecting sensor, Sensor aging or drift, Electromagnetic interference, Calibration error], recommendedChecks=[Inspect and secure sensor connections, Clean or replace sensor if contaminated, Verify power supply voltage and stability, Check for mechanical vibrations near sensor, Test sensor output with a known reference input, Recalibrate sensor if necessary, Inspect for electromagnetic interference sources], draftResponse=Please review the sensor connections, clean the sensor surface, and verify the power supply voltage. Run a controlled test using a known reference to confirm the sensor's accuracy. If the issue persists, consider recalibrating or replacing the sensor., confidence=MEDIUM, limitations=[Only the ticket title and brief description were provided; no detailed diagnostic data or sensor specifications were available.], needsHumanReview=true)
+2026-06-29 00:38:30 [http-nio-8081-exec-3] INFO  traceId= spanId= c.g.j.s.a.a.StructuralValidationAdvisor - [StructuralValidationAdvisor] ticketId=3 valid=true
+2026-06-29 00:38:30 [http-nio-8081-exec-3] INFO  traceId= spanId= c.g.j.s.a.a.HumanReviewSafetyAdvisor - [HumanReviewSafetyAdvisor] ticketId=3 valid=true
+2026-06-29 00:38:56 [http-nio-8081-exec-5] INFO  traceId= spanId= c.g.j.s.r.r.TicketEvidenceRetriever - Retrieved 3 evidence chunks for ticketId=3 preferredCategory=SENSOR
+2026-06-29 00:39:07 [http-nio-8081-exec-5] INFO  traceId= spanId= c.g.j.s.r.r.TicketRagReviewService - RAG AI raw response parsed for ticketId=3 -> TicketRagReviewResponse(summary=The packaging machine sensor displays inconsistent readings, suggesting instability likely caused by loose wiring, incorrect calibration, environmental interference, damaged sensor elements, or an unstable power supply., possibleCauses=[Loose wiring, Incorrect calibration, Environmental interference, Damaged sensor elements, Unstable power supply], recommendedChecks=[Inspect sensor wiring for looseness and secure all connections., Verify the sensor calibration parameters and recalibrate if necessary., Check for environmental interference such as nearby electromagnetic sources., Test the power supply for stability and consider conditioning if fluctuations are detected., Examine sensor elements for visible damage or wear.], draftResponse=Please inspect the sensor wiring for looseness, verify the calibration settings, look for any environmental interference, test the power supply for stability, and check the sensor elements for damage. Address any issues found before re-testing the sensor readings., evidenceRefs=[EvidenceRef(sourceRef=article:4#chunk:0, articleTitle=Sensor Calibration Guide)], confidence=MEDIUM, limitations=[Evidence is limited to a single source; further investigation may be required.], needsHumanReview=true)
+2026-06-29 00:39:56 [http-nio-8081-exec-7] INFO  traceId= spanId= c.g.j.s.r.r.TicketEvidenceRetriever - Retrieved 3 evidence chunks for ticketId=3 preferredCategory=SENSOR
+2026-06-29 00:41:46 [SpringApplicationShutdownHook] INFO  traceId= spanId= o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-06-29 00:41:46 [tomcat-shutdown] INFO  traceId= spanId= o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-06-29 00:41:46 [SpringApplicationShutdownHook] INFO  traceId= spanId= o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-06-29 00:41:46 [SpringApplicationShutdownHook] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-06-29 00:41:46 [SpringApplicationShutdownHook] INFO  traceId= spanId= com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.

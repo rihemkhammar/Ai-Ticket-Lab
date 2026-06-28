@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * Phase 4 — builds the RAG system/user prompts.
+ *  builds the RAG system/user prompts.
  *
  * Evidence chunks are injected as labelled source material only. The system
  * prompt explicitly tells the model to treat them as untrusted data, never

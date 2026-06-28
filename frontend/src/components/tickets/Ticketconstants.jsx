@@ -10,3 +10,11 @@ export  const STAT_CONFIG = [
   { key: 'inProgress', label: 'In Progress', Icon: TbClockHour4,  color: '#fb923c', bg: 'rgba(251,146,60,0.1)',  border: 'rgba(251,146,60,0.2)'  },
   { key: 'closed',     label: 'Closed',      Icon: TbCircleCheck, color: '#4ade80', bg: 'rgba(74,222,128,0.1)',  border: 'rgba(74,222,128,0.2)'  },
 ];
+
+export const FILTER_MAP = {
+  'All':         null,
+  'Open':        'OPEN',
+  'In Progress': 'IN_PROGRESS',
+  'Closed':      'CLOSED',
+};
+ 

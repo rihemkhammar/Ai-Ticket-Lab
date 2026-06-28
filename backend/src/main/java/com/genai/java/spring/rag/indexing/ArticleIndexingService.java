@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Phase 2 — indexes every knowledge article into semantic_chunk:
+ * ndexes every knowledge article into semantic_chunk:
  * chunk -> embed -> store, after wiping any previous chunks for that article.
  */
 @Slf4j
