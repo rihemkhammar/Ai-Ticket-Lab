@@ -24,7 +24,6 @@ function Login() {
       const data = await apiLogin({ username, password });
       console.log("[Login] data reçu après login :", data);
 
-      // Priorité au rôle renvoyé par le backend, sinon override manuel
       const role = data.role || roleOverride;
       console.log("[Login] Rôle utilisé :", role);
 
@@ -220,7 +219,7 @@ function Login() {
             </div>
           </div>
 
-          {/* ─── Role Override (dev) — visible seulement si le backend ne renvoie pas de rôle ─── */}
+          {/* ─── Role Override  */}
           <div>
             <label style={{ display: 'block', fontSize: '15px', fontWeight: 500, color: 'var(--text-muted)', marginBottom: '12px', letterSpacing: '0.3px' }}>
               Rôle <span style={{ fontSize: '12px', color: 'rgba(148,163,184,0.6)', fontWeight: 400 }}>(override dev — à retirer en prod)</span>

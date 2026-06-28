@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Unit tests for ArticleChunkingService.
- *
+
  * Covers:
  * - non-empty chunks are produced
  * - chunk metadata includes articleId, title, category, chunkIndex

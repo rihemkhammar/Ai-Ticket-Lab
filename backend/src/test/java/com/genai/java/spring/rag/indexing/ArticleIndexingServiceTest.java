@@ -21,7 +21,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for ArticleIndexingService.
- *
+
  * Covers:
  * - indexing deletes old chunks before re-indexing (reindex behavior)
  * - indexing creates chunks for seeded articles

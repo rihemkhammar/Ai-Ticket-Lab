@@ -160,4 +160,43 @@ export const runAiReview = async (ticketId) => {
   return response.data;
 };
 
+// Knowledge Articles 
+
+// GET /api/articles — liste tous les articles de connaissance
+export const getAllArticles = async () => {
+  const response = await api.get("/api/articles");
+  return response.data;
+};
+
+// GET /api/articles/:id — détail d'un article
+export const getArticleById = async (id) => {
+  const response = await api.get(`/api/articles/${id}`);
+  return response.data;
+};
+
+// POST /api/articles/index — chunk + embed + indexe tous les articles dans pgvector
+// retourne { articlesIndexed, chunksCreated }
+export const indexArticles = async () => {
+  const response = await api.post("/api/articles/index");
+  return response.data;
+};
+
+// Evidence (debug retrieval) 
+
+// GET /api/tickets/:id/evidence — chunks pertinents récupérés pour un ticket (debug, sans appel GPT)
+// retourne { ticketId, evidence: [...] }
+export const getTicketEvidence = async (ticketId) => {
+  const response = await api.get(`/api/tickets/${ticketId}/evidence`);
+  return response.data;
+};
+
+// RAG AI Review 
+
+// POST /api/tickets/:id/ai-review/rag — lance la review GPT évidence-grounded
+// retourne { reviewId, ticketId, promptVersion, modelName, status, result, errorMessage, createdAt, retrievedEvidence }
+export const runRagReview = async (ticketId) => {
+  const response = await api.post(`/api/tickets/${ticketId}/ai-review/rag`);
+  return response.data;
+};
+
 export default api;
