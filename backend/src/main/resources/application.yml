@@ -6,6 +6,11 @@ app:
   jwt:
     secret: "K9x2mL0pQ7rmZ8vN3sT6uR1cB4dE5fG2hJ8kP"
     expiration-ms: 86400000
+  # ── RAG retrieval ──────────────────────────────────
+  rag:
+    top-k: 3
+    embedding-dimensions: 384 #1536
+    max-chunk-chars: 400
 spring:
   application:
     name: genai-java-spring
@@ -38,7 +43,11 @@ spring:
         options:
           model: openai/gpt-oss-20b #gpt-4o
 
-
+    embedding:
+      base-url: https://api-inference.huggingface.co/v1 #https://api.openai.com
+      api-key: ${EMBEDDING_API_KEY} #${EMBEDDING_API_KEY:${OPENAI_API_KEY}}
+      options:
+        model: sentence-transformers/all-MiniLM-L6-v2 #text-embedding-3-small
 
 
 # ── Logging ─────────────────────────────────────────────
