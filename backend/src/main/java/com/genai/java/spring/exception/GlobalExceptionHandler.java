@@ -1,6 +1,7 @@
 package com.genai.java.spring.exception;
 
 import com.genai.java.spring.aireview.dto.ErrorResponse;
+import com.genai.java.spring.knowledge.KnowledgeArticleNotFoundException;
 import com.genai.java.spring.ticket.TicketNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,5 +15,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleTicketNotFound(TicketNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse("Ticket not found."));
+    }
+
+    //  knowledge article lookup (GET /api/articles/{id})
+    @ExceptionHandler(KnowledgeArticleNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleArticleNotFound(KnowledgeArticleNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse("Knowledge article not found."));
     }
 }
