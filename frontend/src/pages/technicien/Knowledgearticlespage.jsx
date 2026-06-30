@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAllArticles } from '../../services/api';
+import { getAllArticles, indexArticles } from '../../services/api';
 
 import ArticleStats          from '../../components/articles/Articlestats';
 import ArticleFilters        from '../../components/articles/Articlefilters';
@@ -15,6 +15,11 @@ export default function KnowledgeArticlesPage() {
   const [filter,        setFilter]        = useState('All');
   const [selectedId,    setSelectedId]    = useState(null);
   const [retry,         setRetry]         = useState(0);
+
+  /* ── Indexing state ── */
+  const [indexing,      setIndexing]      = useState(false);
+  const [indexResult,   setIndexResult]   = useState(null); // { articlesIndexed, chunksCreated }
+  const [indexError,    setIndexError]    = useState(null);
 
   /* ── Fetch ── */
   useEffect(() => {
@@ -41,6 +46,23 @@ export default function KnowledgeArticlesPage() {
 
   const handleRetry = () => setRetry(r => r + 1);
 
+  /* ── Indexing handler ── */
+  const handleIndex = async () => {
+    setIndexing(true);
+    setIndexResult(null);
+    setIndexError(null);
+    try {
+      const data = await indexArticles();
+      setIndexResult(data);
+      setRetry(r => r + 1); // refresh article list after indexing
+    } catch (err) {
+      console.error('[KnowledgeArticlesPage] indexArticles error:', err);
+      setIndexError(err?.response?.data?.message ?? 'Indexing failed. Please try again.');
+    } finally {
+      setIndexing(false);
+    }
+  };
+
   /* ── Filter ── */
   const filtered = articles.filter(a => {
     const categoryFilter = FILTER_MAP[filter];
@@ -53,20 +75,84 @@ export default function KnowledgeArticlesPage() {
     <div style={{ padding: '32px', maxWidth: '1200px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', margin: 0, letterSpacing: '-0.3px' }}>
-          Knowledge Articles
-        </h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '6px 0 0' }}>
-          {loading
-            ? 'Loading knowledge articles…'
-            : <>{articles.length} article{articles.length !== 1 ? 's' : ''} in total</>
-          }
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h1 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', margin: 0, letterSpacing: '-0.3px' }}>
+              Knowledge Articles
+            </h1>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '6px 0 0' }}>
+              {loading
+                ? 'Loading knowledge articles…'
+                : <>{articles.length} article{articles.length !== 1 ? 's' : ''} in total</>
+              }
+            </p>
+          </div>
+
+          {/* S3-G03: Index Articles button */}
+          <button
+            onClick={handleIndex}
+            disabled={indexing}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '10px 20px', borderRadius: '12px', fontSize: '14px', fontWeight: 600,
+              cursor: indexing ? 'not-allowed' : 'pointer',
+              background: indexing ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.85)',
+              color: '#fff', border: '1px solid rgba(99,102,241,0.6)',
+              transition: 'background 0.2s',
+            }}
+          >
+            {indexing ? (
+              <>
+                <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                Indexing…
+              </>
+            ) : (
+              '⚡ Index Articles'
+            )}
+          </button>
+        </div>
+
+        {/* S3-G03: Indexing success summary */}
+        {indexResult && (
+          <div style={{
+            marginTop: '14px', padding: '14px 18px', borderRadius: '12px',
+            background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.3)',
+            color: '#34d399', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '10px',
+          }}>
+            <span style={{ fontSize: '18px' }}>✓</span>
+            <span>
+              Indexing complete —{' '}
+              <strong>{indexResult.articlesIndexed ?? '?'} article{indexResult.articlesIndexed !== 1 ? 's' : ''}</strong> indexed,{' '}
+              <strong>{indexResult.chunksCreated ?? '?'} chunk{indexResult.chunksCreated !== 1 ? 's' : ''}</strong> created.
+            </span>
+            <button
+              onClick={() => setIndexResult(null)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#34d399', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}
+              aria-label="Dismiss"
+            >×</button>
+          </div>
+        )}
+
+        {/* S3-G03: Indexing error */}
+        {indexError && (
+          <div style={{
+            marginTop: '14px', padding: '14px 18px', borderRadius: '12px',
+            background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)',
+            color: '#f87171', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '10px',
+          }}>
+            <span style={{ fontSize: '18px' }}>✕</span>
+            <span>{indexError}</span>
+            <button
+              onClick={() => setIndexError(null)}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}
+              aria-label="Dismiss"
+            >×</button>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
-      <ArticleStats articles={articles} />
-
+<ArticleStats articles={articles} totalChunks={indexResult?.chunksCreated ?? 0} />
       {/* Error state */}
       {error && (
         <div style={{

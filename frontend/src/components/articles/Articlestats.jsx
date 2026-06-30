@@ -1,18 +1,12 @@
 import { ARTICLE_STAT_CONFIG } from './Articleconstants';
 
 /**
- * @param {{ articles: Array }} props
+ * @param {{ articles: Array, totalChunks?: number }} props
  */
-export default function ArticleStats({ articles = [] }) {
-  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-  const now = Date.now();
-
+export default function ArticleStats({ articles = [], totalChunks = 0 }) {
   const counts = {
     total:  articles.length,
-    recent: articles.filter(a => {
-      const created = a.created_at ?? a.createdAt;
-      return created && (now - new Date(created).getTime()) <= ONE_WEEK_MS;
-    }).length,
+    chunks: totalChunks,
     safety: articles.filter(a => a.category === 'SAFETY').length,
   };
 
