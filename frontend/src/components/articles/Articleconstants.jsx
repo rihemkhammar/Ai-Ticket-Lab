@@ -9,11 +9,10 @@ export const CATEGORY_CONFIG = {
 };
 
 export const ARTICLE_STAT_CONFIG = [
-  { key: 'total',   label: 'Articles',         Icon: TbFileText,     color: '#60a5fa', bg: 'rgba(96,165,250,0.1)',  border: 'rgba(96,165,250,0.2)'  },
-  { key: 'recent',  label: 'Added This Week',  Icon: TbCalendarStats, color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.2)' },
-  { key: 'safety',  label: 'Safety Articles',  Icon: TbShieldCheck,  color: '#f87171', bg: 'rgba(248,113,113,0.1)', border: 'rgba(248,113,113,0.2)' },
+  { key: 'total',   label: 'Articles',       Icon: TbFileText,     color: '#60a5fa', bg: 'rgba(96,165,250,0.1)',  border: 'rgba(96,165,250,0.2)'  },
+  { key: 'chunks',  label: 'Total Chunks',   Icon: TbCalendarStats, color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.2)' },
+  { key: 'safety',  label: 'Safety Articles', Icon: TbShieldCheck,  color: '#f87171', bg: 'rgba(248,113,113,0.1)', border: 'rgba(248,113,113,0.2)' },
 ];
-
 
 export const FILTER_MAP = {
   'All':      null,

@@ -418,14 +418,78 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
 )}
                     </div>
                   )}
-                  {ragResult.result?.summary        && <Section title="Résumé"><p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{ragResult.result.summary}</p></Section>}
-                  {ragResult.result?.diagnosis      && <Section title="Diagnostic"><p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{ragResult.result.diagnosis}</p></Section>}
-                  {ragResult.result?.recommendation && <Section title="Recommandation"><p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{ragResult.result.recommendation}</p></Section>}
-                  {ragResult.result?.limitations    && <Section title="Limitations"><p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{ragResult.result.limitations}</p></Section>}
+                  {ragResult.result?.summary && (
+                    <Section title="Résumé">
+                      <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{ragResult.result.summary}</p>
+                    </Section>
+                  )}
+
+                  {/* S3-G04: possibleCauses */}
+                  {ragResult.result?.possibleCauses?.length > 0 && (
+                    <Section title="Causes possibles">
+                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                        {ragResult.result.possibleCauses.map((c, i) => (
+                          <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{c}</li>
+                        ))}
+                      </ul>
+                    </Section>
+                  )}
+
+                  {/* S3-G04: recommendedChecks */}
+                  {ragResult.result?.recommendedChecks?.length > 0 && (
+                    <Section title="Vérifications recommandées">
+                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                        {ragResult.result.recommendedChecks.map((c, i) => (
+                          <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{c}</li>
+                        ))}
+                      </ul>
+                    </Section>
+                  )}
+
+                  {/* S3-G04: draftResponse */}
+                  {ragResult.result?.draftResponse && (
+                    <Section title="Réponse suggérée">
+                      <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{ragResult.result.draftResponse}</p>
+                    </Section>
+                  )}
+
+                  {/* S3-G04: evidenceRefs — sources citées par le modèle */}
+                  {ragResult.result?.evidenceRefs?.length > 0 && (
+                    <Section title="Sources citées">
+                      {ragResult.result.evidenceRefs.map((ref, i) => (
+                        <div key={i} style={{
+                          display: 'flex', alignItems: 'flex-start', gap: '8px',
+                          padding: '8px 12px', borderRadius: '10px', marginBottom: '6px',
+                          background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.2)',
+                        }}>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#a78bfa', marginTop: '1px', flexShrink: 0 }}>#{i + 1}</span>
+                          <div>
+                            {ref.articleTitle && (
+                              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '2px' }}>{ref.articleTitle}</div>
+                            )}
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{ref.sourceRef}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </Section>
+                  )}
+
+                  {/* S3-G04: limitations */}
+                  {ragResult.result?.limitations?.length > 0 && (
+                    <Section title="Limitations">
+                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                        {ragResult.result.limitations.map((l, i) => (
+                          <li key={i} style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>{l}</li>
+                        ))}
+                      </ul>
+                    </Section>
+                  )}
+
+                  {/* S3-G04: retrieved chunks — aperçu optionnel uniquement */}
                   {ragResult.retrievedEvidence?.length > 0 && (
                     <div style={{ marginTop: '16px' }}>
                       <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' }}>
-                        Evidence utilisée ({ragResult.retrievedEvidence.length} chunks)
+                        Chunks récupérés ({ragResult.retrievedEvidence.length})
                       </div>
                       {ragResult.retrievedEvidence.map((e, i) => (
                         <div key={i} style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '8px 12px', borderLeft: '2px solid rgba(167,139,250,0.4)', marginBottom: '8px', lineHeight: 1.6 }}>
