@@ -4,7 +4,7 @@ CREATE TABLE semantic_chunk (
                                 article_id    BIGINT    NOT NULL REFERENCES knowledge_article(id) ON DELETE CASCADE,
                                 chunk_index   INTEGER   NOT NULL,
                                 text          TEXT      NOT NULL,
-                                embedding     vector(1536),
+                                embedding vector(384),
                                 metadata_json JSONB,
                                 created_at    TIMESTAMP NOT NULL DEFAULT now()
 );

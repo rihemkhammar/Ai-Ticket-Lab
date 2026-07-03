@@ -7,11 +7,6 @@ import org.springframework.stereotype.Component;
 import java.sql.SQLException;
 import java.util.List;
 
-/**
- * Handles everything related to the pgvector "embedding" column of
- * semantic_chunk, since this is the one column not mapped by JPA
- * (see {@link SemanticChunk}).
- */
 @Component
 public class VectorChunkDao {
 
@@ -21,7 +16,6 @@ public class VectorChunkDao {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /** Writes the embedding for a chunk that was already persisted via JPA. */
     public void updateEmbedding(Long chunkId, float[] embedding) {
         jdbcTemplate.update(
                 "UPDATE semantic_chunk SET embedding = ?::vector WHERE id = ?",
@@ -30,14 +24,15 @@ public class VectorChunkDao {
 
     /**
      * Top-K nearest chunks to the given query embedding, using pgvector's
-     * "<->" (Euclidean distance) operator. Lower distance = more similar;
-     * we expose it back as a 0..1-ish similarity score for the frontend.
+     * "<=>" (COSINE distance) operator instead of "<->" (Euclidean).
+     * Cosine similarity is the right choice for sentence-embedding models.
+     * Lower distance = more similar (0 = identical direction, 2 = opposite).
      */
     public List<VectorSearchRow> search(float[] queryEmbedding, int topK) {
         String sql = """
                 SELECT sc.id, sc.article_id, sc.chunk_index, sc.text,
                        ka.title, ka.category,
-                       sc.embedding <-> ?::vector AS distance
+                       sc.embedding <=> ?::vector AS distance
                 FROM semantic_chunk sc
                 JOIN knowledge_article ka ON ka.id = sc.article_id
                 WHERE sc.embedding IS NOT NULL
@@ -56,12 +51,62 @@ public class VectorChunkDao {
         ), toPgVector(queryEmbedding), topK);
     }
 
+    /**
+     * Top-K chunks by keyword relevance (Postgres full-text search / ts_rank).
+     */
+    public List<VectorSearchRow> keywordSearch(String queryText, int topK) {
+        String sql = """
+                SELECT sc.id, sc.article_id, sc.chunk_index, sc.text,
+                       ka.title, ka.category,
+                       ts_rank(sc.text_search, plainto_tsquery('english', ?)) AS rank
+                FROM semantic_chunk sc
+                JOIN knowledge_article ka ON ka.id = sc.article_id
+                WHERE sc.text_search @@ plainto_tsquery('english', ?)
+                ORDER BY rank DESC
+                LIMIT ?
+                """;
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new VectorSearchRow(
+                rs.getLong("id"),
+                rs.getLong("article_id"),
+                rs.getInt("chunk_index"),
+                rs.getString("text"),
+                rs.getString("title"),
+                rs.getString("category"),
+                1.0 - rs.getDouble("rank")
+        ), queryText, queryText, topK);
+    }
+
+    /**
+     * Fetches the chunks immediately before and after the given chunk
+     * within the same article ("neighbor stitching").
+     */
+    public List<VectorSearchRow> findNeighbors(Long articleId, int chunkIndex) {
+        String sql = """
+                SELECT sc.id, sc.article_id, sc.chunk_index, sc.text,
+                       ka.title, ka.category
+                FROM semantic_chunk sc
+                JOIN knowledge_article ka ON ka.id = sc.article_id
+                WHERE sc.article_id = ?
+                  AND sc.chunk_index IN (?, ?)
+                ORDER BY sc.chunk_index ASC
+                """;
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new VectorSearchRow(
+                rs.getLong("id"),
+                rs.getLong("article_id"),
+                rs.getInt("chunk_index"),
+                rs.getString("text"),
+                rs.getString("title"),
+                rs.getString("category"),
+                0.0
+        ), articleId, chunkIndex - 1, chunkIndex + 1);
+    }
+
     private PGobject toPgVector(float[] embedding) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < embedding.length; i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
+            if (i > 0) sb.append(',');
             sb.append(embedding[i]);
         }
         sb.append(']');

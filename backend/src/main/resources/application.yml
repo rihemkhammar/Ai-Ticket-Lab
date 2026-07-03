@@ -9,8 +9,18 @@ app:
   # ── RAG retrieval ──────────────────────────────────
   rag:
     top-k: 3
-    embedding-dimensions: 1536
-    max-chunk-chars: 400
+    embedding-dimensions: 384 #1536
+    max-chunk-tokens: 220
+    hybrid:
+      candidate-pool: 20
+      fused-pool: 10
+    reranker:
+      model: cross-encoder/ms-marco-MiniLM-L-6-v2
+    huggingface:
+      base-url: https://router.huggingface.co #https://api.openai.com
+      api-key: ${EMBEDDING_API_KEY} #${EMBEDDING_API_KEY:${OPENAI_API_KEY}}
+      options:
+        model: sentence-transformers/all-MiniLM-L6-v2 #text-embedding-3-small
 spring:
   application:
     name: genai-java-spring
@@ -42,12 +52,9 @@ spring:
       chat:
         options:
           model: openai/gpt-oss-20b #gpt-4o
+      embedding:
+        enabled: false
 
-    embedding:
-      base-url: https://api-inference.huggingface.co/v1 #https://api.openai.com
-      api-key: ${EMBEDDING_API_KEY} #${EMBEDDING_API_KEY:${OPENAI_API_KEY}}
-      options:
-        model: sentence-transformers/all-MiniLM-L6-v2 #text-embedding-3-small
 
 
 
