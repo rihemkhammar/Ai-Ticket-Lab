@@ -2,6 +2,7 @@ package com.genai.java.spring.rag.chunk;
 
 import com.genai.java.spring.knowledge.KnowledgeArticle;
 import com.genai.java.spring.rag.chunk.ArticleChunkingService.ArticleChunk;
+import com.genai.java.spring.rag.tokenizer.TokenizerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -9,31 +10,19 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Unit tests for ArticleChunkingService.
-
- * Covers:
- * - non-empty chunks are produced
- * - chunk metadata includes articleId, title, category, chunkIndex
- * - blank/null content is handled gracefully
- * - content that fits in one paragraph produces a single chunk
- * - long content is split into multiple chunks
- * - each chunk does not exceed maxChunkChars
- */
 class ArticleChunkingServiceTest {
 
-    private static final int MAX_CHUNK_CHARS = 100;
+    // Small token budget so short test strings can still trigger splitting.
+    private static final int MAX_CHUNK_TOKENS = 20;
 
     private ArticleChunkingService service;
+    private TokenizerService tokenizerService;
 
     @BeforeEach
     void setUp() {
-        service = new ArticleChunkingService(MAX_CHUNK_CHARS);
+        tokenizerService = new TokenizerService();
+        service = new ArticleChunkingService(MAX_CHUNK_TOKENS, tokenizerService);
     }
-
-    // -----------------------------------------------------------------------
-    // 1. non-empty chunks for normal articles
-    // -----------------------------------------------------------------------
 
     @Test
     void chunk_producesNonEmptyList_forNormalArticle() {
@@ -44,10 +33,6 @@ class ArticleChunkingServiceTest {
 
         assertThat(chunks).isNotEmpty();
     }
-
-    // -----------------------------------------------------------------------
-    // 2. chunk metadata contains article id, title, category, chunk index
-    // -----------------------------------------------------------------------
 
     @Test
     void chunk_includesCorrectMetadata() {
@@ -66,8 +51,8 @@ class ArticleChunkingServiceTest {
 
     @Test
     void chunk_indexesAreSequentialStartingAtZero() {
-        // Use a long content to guarantee multiple chunks
-        String longContent = "A".repeat(MAX_CHUNK_CHARS + 50) + "\n\n" + "B".repeat(MAX_CHUNK_CHARS + 50);
+        String longContent = "Motor bearing lubrication check. ".repeat(20) + "\n\n"
+                + "Sensor calibration and wiring inspection. ".repeat(20);
         KnowledgeArticle article = articleWith(1L, "Title", "CAT", longContent);
 
         List<ArticleChunk> chunks = service.chunk(article);
@@ -76,10 +61,6 @@ class ArticleChunkingServiceTest {
             assertThat(chunks.get(i).chunkIndex()).isEqualTo(i);
         }
     }
-
-    // -----------------------------------------------------------------------
-    // 3. blank / null content is handled gracefully
-    // -----------------------------------------------------------------------
 
     @Test
     void chunk_returnsEmptyList_whenContentIsNull() {
@@ -99,13 +80,9 @@ class ArticleChunkingServiceTest {
         assertThat(chunks).isEmpty();
     }
 
-    // -----------------------------------------------------------------------
-    // 4. short content produces one chunk
-    // -----------------------------------------------------------------------
-
     @Test
-    void chunk_producesOneChunk_whenContentFitsInMaxChars() {
-        String shortContent = "Motor overheating: check bearings."; // well under 100 chars
+    void chunk_producesOneChunk_whenContentFitsInMaxTokens() {
+        String shortContent = "Motor overheating: check bearings.";
         KnowledgeArticle article = articleWith(5L, "Short Article", "MOTOR", shortContent);
 
         List<ArticleChunk> chunks = service.chunk(article);
@@ -114,14 +91,9 @@ class ArticleChunkingServiceTest {
         assertThat(chunks.get(0).text()).isEqualTo(shortContent);
     }
 
-    // -----------------------------------------------------------------------
-    // 5. long single-paragraph content is split into multiple chunks
-    // -----------------------------------------------------------------------
-
     @Test
     void chunk_splitsLongParagraph_intoMultipleChunks() {
-        // single paragraph longer than MAX_CHUNK_CHARS
-        String longParagraph = "Motor overheating description. ".repeat(10); // ~310 chars > 100
+        String longParagraph = "Motor overheating description. ".repeat(10);
         KnowledgeArticle article = articleWith(1L, "Title", "MOTOR", longParagraph);
 
         List<ArticleChunk> chunks = service.chunk(article);
@@ -130,22 +102,16 @@ class ArticleChunkingServiceTest {
     }
 
     @Test
-    void chunk_eachChunk_doesNotExceedMaxChunkChars() {
+    void chunk_eachChunk_doesNotExceedMaxChunkTokens() {
         String longParagraph = "A very long sentence about motor maintenance issues. ".repeat(10);
         KnowledgeArticle article = articleWith(1L, "Title", "MOTOR", longParagraph);
 
         List<ArticleChunk> chunks = service.chunk(article);
 
-        // Each individual chunk text must not be bigger than the configured limit
         assertThat(chunks).allSatisfy(chunk ->
-                assertThat(chunk.text().length()).isLessThanOrEqualTo(MAX_CHUNK_CHARS + 50));
-        // Note: +50 tolerance because the splitter may keep a few extra chars
-        // when the last sentence-break is just beyond the boundary.
+                assertThat(tokenizerService.countTokens(chunk.text()))
+                        .isLessThanOrEqualTo(MAX_CHUNK_TOKENS));
     }
-
-    // -----------------------------------------------------------------------
-    // 6. multi-paragraph content produces at least as many chunks as paragraphs
-    // -----------------------------------------------------------------------
 
     @Test
     void chunk_splitsByParagraphBreaks() {
@@ -157,13 +123,8 @@ class ArticleChunkingServiceTest {
 
         List<ArticleChunk> chunks = service.chunk(article);
 
-        // At least 3 chunks (one per paragraph)
         assertThat(chunks.size()).isGreaterThanOrEqualTo(3);
     }
-
-    // -----------------------------------------------------------------------
-    // 7. chunk text is not blank
-    // -----------------------------------------------------------------------
 
     @Test
     void chunk_noChunkHasBlankText() {
@@ -176,13 +137,8 @@ class ArticleChunkingServiceTest {
                 assertThat(chunk.text()).isNotBlank());
     }
 
-    // -----------------------------------------------------------------------
-    // helpers
-    // -----------------------------------------------------------------------
-
     private KnowledgeArticle articleWith(Long id, String title, String category, String content) {
         KnowledgeArticle a = new KnowledgeArticle();
-        // KnowledgeArticle.id is generated; use reflection to set it in tests
         try {
             var field = KnowledgeArticle.class.getDeclaredField("id");
             field.setAccessible(true);

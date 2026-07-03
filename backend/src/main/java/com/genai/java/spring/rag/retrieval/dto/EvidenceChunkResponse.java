@@ -8,6 +8,7 @@ public class EvidenceChunkResponse {
     private String category;
     private int chunkIndex;
     private String text;
+    private String expandedText;
     private Double similarityScore;
 
     public static EvidenceChunkResponse of(Long chunkArticleId, int chunkIndex, String text,
@@ -16,6 +17,7 @@ public class EvidenceChunkResponse {
         dto.articleId = chunkArticleId;
         dto.chunkIndex = chunkIndex;
         dto.text = text;
+        dto.expandedText = text;
         dto.articleTitle = articleTitle;
         dto.category = category;
         dto.similarityScore = similarityScore;
@@ -40,6 +42,9 @@ public class EvidenceChunkResponse {
 
     public String getText()                          { return text; }
     public void setText(String v)                     { this.text = v; }
+
+    public String getExpandedText()                   { return expandedText; }
+    public void setExpandedText(String v)              { this.expandedText = v; }
 
     public Double getSimilarityScore()                { return similarityScore; }
     public void setSimilarityScore(Double v)          { this.similarityScore = v; }

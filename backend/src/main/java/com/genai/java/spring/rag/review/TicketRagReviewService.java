@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Phase 4 — evidence-grounded AI review.
+ * Pevidence-grounded AI review.
  *
  * Flow: load ticket -> retrieve evidence chunks -> build RAG prompt
  * -> call GPT -> parse JSON -> validate (structure + evidence refs)

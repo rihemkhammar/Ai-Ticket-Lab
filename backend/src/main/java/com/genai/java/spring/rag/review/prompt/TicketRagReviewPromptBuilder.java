@@ -114,7 +114,7 @@ public class TicketRagReviewPromptBuilder {
         for (EvidenceChunkResponse chunk : evidence) {
             sb.append("[").append(i++).append("] sourceRef: ").append(chunk.getSourceRef()).append("\n");
             sb.append("Article: ").append(chunk.getArticleTitle()).append("\n");
-            sb.append("Text: ").append(chunk.getText()).append("\n\n");
+            sb.append("Text: ").append(chunk.getExpandedText()).append("\n\n");
         }
         return sb.toString().trim();
     }
