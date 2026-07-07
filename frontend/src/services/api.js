@@ -199,4 +199,12 @@ export const runRagReview = async (ticketId) => {
   return response.data;
 };
 
+// Agentic Ticket Investigation 
+
+export const runAgentInvestigation = async (ticketId, options = {}) => {
+  const response = await api.post(`/api/tickets/${ticketId}/agent/investigate`, options);
+  return response.data;
+};
+
+
 export default api;
