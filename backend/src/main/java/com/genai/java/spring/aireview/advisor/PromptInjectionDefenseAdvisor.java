@@ -1,33 +1,24 @@
 package com.genai.java.spring.aireview.advisor;
 
+import com.genai.java.spring.shared.advisor.PromptInjectionGuard;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Locale;
 
 /**
-
  * Ne bloque jamais l'appel : le ticket reste envoyé au modèle (qui doit
  * le traiter comme donnée, pas comme instruction — cf. system prompt).
- * Sert à détecter/auditer/logger une tentative d'injection pour pouvoir
- * la croiser plus tard avec HumanReviewSafetyAdvisor.
+ * La détection elle-même vit désormais dans PromptInjectionGuard (partagé
+ * avec le module agent).
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class PromptInjectionDefenseAdvisor implements AiReviewAdvisor {
 
-    private static final List<String> SUSPICIOUS_PATTERNS = List.of(
-            "ignore all previous instructions",
-            "ignore previous instructions",
-            "disregard the system prompt",
-            "you are now",
-            "new instructions:",
-            "mark this ticket as resolved",
-            "no human review is needed",
-            "needshumanreview\": false",
-            "set confidence high"
-    );
+    private final PromptInjectionGuard promptInjectionGuard;
 
     @Override
     public Stage getStage() {
@@ -41,27 +32,18 @@ public class PromptInjectionDefenseAdvisor implements AiReviewAdvisor {
 
     @Override
     public void advise(AiReviewContext context) {
-        String haystack = (nullToEmpty(context.getTicket().getTitle())
-                + " " + nullToEmpty(context.getTicket().getDescription()))
-                .toLowerCase(Locale.ROOT);
+        List<String> flags = promptInjectionGuard.scan(
+                context.getTicket().getTitle(),
+                context.getTicket().getDescription());
 
-        for (String pattern : SUSPICIOUS_PATTERNS) {
-            if (haystack.contains(pattern)) {
-                context.setInjectionSuspected(true);
-                context.getInjectionFlags().add(pattern);
-            }
-        }
-
-        if (context.isInjectionSuspected()) {
+        if (!flags.isEmpty()) {
+            context.setInjectionSuspected(true);
+            context.getInjectionFlags().addAll(flags);
             log.warn("[PromptInjectionDefenseAdvisor] SUSPICIOUS ticketId={} patterns={}",
-                    context.getTicket().getId(), context.getInjectionFlags());
+                    context.getTicket().getId(), flags);
         } else {
             log.debug("[PromptInjectionDefenseAdvisor] ticketId={} no suspicious pattern detected",
                     context.getTicket().getId());
         }
-    }
-
-    private String nullToEmpty(String s) {
-        return s == null ? "" : s;
     }
 }

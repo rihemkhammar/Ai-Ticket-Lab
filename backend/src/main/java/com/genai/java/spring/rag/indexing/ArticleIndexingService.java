@@ -8,6 +8,9 @@ import com.genai.java.spring.rag.chunk.SemanticChunk;
 import com.genai.java.spring.rag.chunk.SemanticChunkRepository;
 import com.genai.java.spring.rag.chunk.VectorChunkDao;
 import com.genai.java.spring.rag.embedding.EmbeddingService;
+
+import com.genai.java.spring.rag.indexing.dto.ArticleIndexStatusResponse;
+
 import com.genai.java.spring.rag.indexing.dto.IndexingSummaryResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -58,6 +61,19 @@ public class ArticleIndexingService {
 
         log.info("Indexing complete: articlesIndexed={} chunksCreated={}", articles.size(), totalChunks);
         return new IndexingSummaryResponse(articles.size(), totalChunks);
+    }
+
+
+    /**
+     * S4-BUG-01: real, DB-backed snapshot of how many articles/chunks
+     * currently exist. Unlike the response of indexAllArticles(), this can
+     * be called any time (page load, dashboard load, after navigating
+     * back) and always reflects what is actually persisted.
+     */
+    public ArticleIndexStatusResponse getStatus() {
+        long articlesTotal = articleRepository.count();
+        long chunksTotal = chunkRepository.count();
+        return new ArticleIndexStatusResponse(articlesTotal, chunksTotal);
     }
 
     private int indexArticle(KnowledgeArticle article) {

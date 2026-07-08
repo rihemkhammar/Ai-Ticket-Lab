@@ -18,21 +18,38 @@ public class RagReviewValidator {
             throw new RagReviewValidationException("AI response could not be parsed.");
         }
 
-        validateStructure(response);
-        validateEvidenceReferences(response, retrievedEvidence);
+        boolean isNoFindingResponse = isLowConfidenceNoFinding(response);
+
+        validateStructure(response, isNoFindingResponse);
+        validateEvidenceReferences(response, retrievedEvidence, isNoFindingResponse);
 
         if (response.getNeedsHumanReview() == null || !response.getNeedsHumanReview()) {
             throw new RagReviewValidationException("AI response needsHumanReview must be true.");
         }
     }
 
-    private void validateStructure(TicketRagReviewResponse response) {
+    /**
+     * Cas légitime : le modèle n'a identifié aucune cause exploitable.
+     * On l'accepte seulement si confidence=LOW ET aucune cause/check/ref renvoyé,
+     * pour éviter qu'un modèle "paresseux" abuse de cette règle en HIGH/MEDIUM.
+     */
+    private boolean isLowConfidenceNoFinding(TicketRagReviewResponse response) {
+        return response.getConfidence() == Confidence.LOW
+                && isEmpty(response.getPossibleCauses())
+                && isEmpty(response.getRecommendedChecks())
+                && isEmpty(response.getEvidenceRefs());
+    }
+
+    private void validateStructure(TicketRagReviewResponse response, boolean isNoFindingResponse) {
         if (isBlank(response.getSummary()))
             throw new RagReviewValidationException("Summary must not be blank.");
-        if (isEmpty(response.getPossibleCauses()))
+
+        if (!isNoFindingResponse && isEmpty(response.getPossibleCauses()))
             throw new RagReviewValidationException("Possible causes must not be empty.");
-        if (isEmpty(response.getRecommendedChecks()))
+
+        if (!isNoFindingResponse && isEmpty(response.getRecommendedChecks()))
             throw new RagReviewValidationException("Recommended checks must not be empty.");
+
         if (isBlank(response.getDraftResponse()))
             throw new RagReviewValidationException("Draft response must not be blank.");
         if (response.getConfidence() == null)
@@ -42,7 +59,8 @@ public class RagReviewValidator {
     }
 
     private void validateEvidenceReferences(TicketRagReviewResponse response,
-                                            List<EvidenceChunkResponse> retrievedEvidence) {
+                                            List<EvidenceChunkResponse> retrievedEvidence,
+                                            boolean isNoFindingResponse) {
         boolean evidenceWasRetrieved = retrievedEvidence != null && !retrievedEvidence.isEmpty();
         List<EvidenceRef> returnedRefs = response.getEvidenceRefs();
         boolean hasReturnedRefs = returnedRefs != null && !returnedRefs.isEmpty();
@@ -51,7 +69,6 @@ public class RagReviewValidator {
             if (hasReturnedRefs)
                 throw new RagReviewValidationException(
                         "AI invented evidence references although no evidence was retrieved.");
-            // S3-G02: forcer Confidence.LOW
             if (response.getConfidence() != Confidence.LOW)
                 throw new RagReviewValidationException(
                         "When no evidence is retrieved, confidence must be LOW (got: "
@@ -62,9 +79,15 @@ public class RagReviewValidator {
             return;
         }
 
-        if (!hasReturnedRefs)
+        // Evidence a été récupérée (ex: ticket 4 : 3 chunks), mais le modèle a jugé
+        // qu'aucun n'était réellement pertinent -> on l'accepte si confidence=LOW.
+        if (!hasReturnedRefs) {
+            if (isNoFindingResponse) {
+                return;
+            }
             throw new RagReviewValidationException(
                     "Evidence was retrieved but the AI response did not include evidenceRefs.");
+        }
 
         Set<String> validSourceRefs = retrievedEvidence.stream()
                 .map(EvidenceChunkResponse::getSourceRef)
@@ -84,7 +107,6 @@ public class RagReviewValidator {
                 .filter(java.util.Objects::nonNull)
                 .anyMatch(l -> {
                     String lower = l.toLowerCase();
-                    // S3-G02: "evidence was found" supprimé car faux positif
                     return lower.contains("no relevant evidence")
                             || lower.contains("no evidence")
                             || lower.contains("insufficient evidence")
