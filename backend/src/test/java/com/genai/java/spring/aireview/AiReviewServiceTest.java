@@ -29,6 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import com.genai.java.spring.shared.advisor.HumanReviewPolicy;
+import com.genai.java.spring.shared.advisor.PromptInjectionGuard;
 
 /**
  * Test unitaire d'AiReviewService.
@@ -94,11 +96,10 @@ class AiReviewServiceTest {
         // comportement M2 (prompt v2, anti-injection, garde-fous post-call).
         AiReviewAdvisorChain advisorChain = new AiReviewAdvisorChain(List.of(
                 new SystemPromptAdvisor(new TicketReviewPromptBuilder()),
-                new PromptInjectionDefenseAdvisor(),
+                new PromptInjectionDefenseAdvisor(new PromptInjectionGuard()),
                 new StructuralValidationAdvisor(),
-                new HumanReviewSafetyAdvisor()
+                new HumanReviewSafetyAdvisor(new HumanReviewPolicy())
         ));
-
         // Constructeur à 6 paramètres : AiReviewService gère MODEL_NAME en interne.
         service = new AiReviewService(
                 chatClient,

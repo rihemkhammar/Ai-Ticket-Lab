@@ -6,6 +6,7 @@ import com.genai.java.spring.aireview.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,6 +37,16 @@ public class TicketAgentInvestigationController {
             return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(response);
         }
         return ResponseEntity.ok(response);
+    }
+
+    // fetch the last stored agent run without re-running the
+    // investigation, so the frontend can redisplay it after navigating
+    // away and back.
+    @GetMapping("/{ticketId}/agent/investigate")
+    public ResponseEntity<TicketAgentInvestigationResponse> getLatestRun(@PathVariable Long ticketId) {
+        return service.getLatestRun(ticketId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @ExceptionHandler(AgentValidationException.class)

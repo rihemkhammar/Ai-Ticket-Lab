@@ -27,13 +27,13 @@ public class TicketEvidenceTool {
     }
 
     /**
-     * topK is accepted for interface parity with the story spec; the
-     * underlying retriever already applies its own configured top-k /
-     * rerank pipeline (app.rag.top-k).
+     * S4-G03: topK is now honored end-to-end — it is forwarded to
+     * TicketEvidenceRetriever#retrieve(ticket, topK), which overrides the
+     * configured app.rag.top-k for this call (clamped to a safe range).
      */
     public TicketEvidenceResult retrieve(Ticket ticket, int topK) {
         try {
-            List<EvidenceChunkResponse> evidence = evidenceRetriever.retrieve(ticket);
+            List<EvidenceChunkResponse> evidence = evidenceRetriever.retrieve(ticket, topK);
             return TicketEvidenceResult.of(ticket.getId(), evidence);
         } catch (Exception e) {
             log.error("TicketEvidenceTool failed for ticketId={}", ticket.getId(), e);

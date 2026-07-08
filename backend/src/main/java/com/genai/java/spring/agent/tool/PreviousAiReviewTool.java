@@ -1,5 +1,7 @@
 package com.genai.java.spring.agent.tool;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genai.java.spring.agent.tool.dto.PreviousAiReviewResult;
 import com.genai.java.spring.agent.tool.dto.PreviousAiReviewResult.ReviewSummary;
 import com.genai.java.spring.aireview.AiReview;
@@ -21,10 +23,17 @@ public class PreviousAiReviewTool {
 
     public static final String NAME = "PreviousAiReviewTool";
 
-    private final AiReviewRepository aiReviewRepository;
+    /** Generic, safe fallback shown when resultJson is missing or cannot be parsed. */
+    private static final String FALLBACK_SUMMARY = "Previous review completed with no readable summary.";
 
-    public PreviousAiReviewTool(AiReviewRepository aiReviewRepository) {
+    private static final int MAX_SUMMARY_LENGTH = 300;
+
+    private final AiReviewRepository aiReviewRepository;
+    private final ObjectMapper objectMapper;
+
+    public PreviousAiReviewTool(AiReviewRepository aiReviewRepository, ObjectMapper objectMapper) {
         this.aiReviewRepository = aiReviewRepository;
+        this.objectMapper = objectMapper;
     }
 
     public PreviousAiReviewResult loadRecent(Long ticketId, int limit) {
@@ -48,17 +57,39 @@ public class PreviousAiReviewTool {
         }
     }
 
-    /** Never exposes the raw result_json or raw provider errors, only a short summary. */
+    /**
+     * Never exposes the raw result_json or raw provider errors — only a
+     * clean, human-readable summary (S4-G05). Parses the stored JSON and
+     * extracts the "summary" field (shared shape between the basic and RAG
+     * AI review responses); falls back to a safe generic message if the
+     * field is missing or the JSON cannot be parsed, rather than dumping a
+     * truncated raw JSON blob.
+     */
     private String summarize(AiReview review) {
         if (review.getStatus() != null && review.getStatus().name().equals("FAILED")) {
             return "Previous review failed validation or provider call.";
         }
         String json = review.getResultJson();
         if (json == null || json.isBlank()) {
-            return "Previous review completed with no stored summary.";
+            return FALLBACK_SUMMARY;
         }
-        // Keep it short and safe: truncate rather than dump raw JSON to the model/UI.
-        String trimmed = json.replaceAll("\\s+", " ").trim();
-        return trimmed.length() > 300 ? trimmed.substring(0, 300) + "..." : trimmed;
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            JsonNode summaryNode = node.get("summary");
+            if (summaryNode == null || summaryNode.isNull() || summaryNode.asText().isBlank()) {
+                return FALLBACK_SUMMARY;
+            }
+            return truncate(summaryNode.asText().trim());
+        } catch (Exception e) {
+            log.warn("Failed to parse stored resultJson for AiReview id={}, using fallback summary",
+                    review.getId(), e);
+            return FALLBACK_SUMMARY;
+        }
+    }
+
+    private String truncate(String text) {
+        return text.length() > MAX_SUMMARY_LENGTH
+                ? text.substring(0, MAX_SUMMARY_LENGTH) + "..."
+                : text;
     }
 }

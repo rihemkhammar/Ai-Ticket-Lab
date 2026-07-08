@@ -37,12 +37,17 @@ class TicketEvidenceToolTest {
                 "Conveyor Motor Overheating Troubleshooting", "CONVEYOR", 0.91);
     }
 
+    private EvidenceChunkResponse chunk(long articleId, int chunkIndex) {
+        return EvidenceChunkResponse.of(articleId, chunkIndex, "Motor overheating can be caused by...",
+                "Conveyor Motor Overheating Troubleshooting", "CONVEYOR", 0.91);
+    }
+
     @Test
     @DisplayName("returns retrieved evidence chunks for the ticket")
     void retrieve_returnsEvidenceChunks() {
         Ticket ticket = mock(Ticket.class);
         when(ticket.getId()).thenReturn(TICKET_ID);
-        when(evidenceRetriever.retrieve(ticket)).thenReturn(List.of(chunk()));
+        when(evidenceRetriever.retrieve(ticket, 3)).thenReturn(List.of(chunk()));
 
         TicketEvidenceResult result = tool.retrieve(ticket, 3);
 
@@ -56,7 +61,7 @@ class TicketEvidenceToolTest {
     void retrieve_noEvidence_returnsEmptyList() {
         Ticket ticket = mock(Ticket.class);
         when(ticket.getId()).thenReturn(TICKET_ID);
-        when(evidenceRetriever.retrieve(ticket)).thenReturn(List.of());
+        when(evidenceRetriever.retrieve(ticket, 3)).thenReturn(List.of());
 
         TicketEvidenceResult result = tool.retrieve(ticket, 3);
 
@@ -68,11 +73,28 @@ class TicketEvidenceToolTest {
     void retrieve_failure_wrappedCleanly() {
         Ticket ticket = mock(Ticket.class);
         when(ticket.getId()).thenReturn(TICKET_ID);
-        when(evidenceRetriever.retrieve(ticket)).thenThrow(new RuntimeException("pgvector timeout"));
+        when(evidenceRetriever.retrieve(ticket, 3)).thenThrow(new RuntimeException("pgvector timeout"));
 
         assertThatThrownBy(() -> tool.retrieve(ticket, 3))
                 .isInstanceOf(AgentToolException.class)
                 .hasMessageContaining("Evidence retrieval unavailable")
                 .hasMessageNotContaining("pgvector timeout");
+    }
+
+    // ── S4-G03: topK is honored end-to-end ──────────────────────────────────────
+
+    @Test
+    @DisplayName("topK=1 forwards to the retriever and uses at most one evidence chunk")
+    void retrieve_topKOne_forwardsToRetrieverAndLimitsResult() {
+        Ticket ticket = mock(Ticket.class);
+        when(ticket.getId()).thenReturn(TICKET_ID);
+        when(evidenceRetriever.retrieve(ticket, 1)).thenReturn(List.of(chunk(1L, 0)));
+
+        TicketEvidenceResult result = tool.retrieve(ticket, 1);
+
+        assertThat(result.getEvidence()).hasSize(1);
+        // The retriever is invoked with the caller-supplied topK, not silently
+        // ignored in favor of the configured app.rag.top-k.
+        org.mockito.Mockito.verify(evidenceRetriever).retrieve(ticket, 1);
     }
 }

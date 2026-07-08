@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,6 +29,16 @@ public class TicketRagReviewController {
                                                              Authentication authentication) {
         RagReviewApiResponse response = service.runRagReview(ticketId, authentication.getName());
         return ResponseEntity.ok(response);
+    }
+
+    // S4-BUG-02: fetch the last stored RAG review without re-running
+    // retrieval + the LLM, so the frontend can redisplay it after
+    // navigating away and back.
+    @GetMapping("/{ticketId}/ai-review/rag")
+    public ResponseEntity<RagReviewApiResponse> getLatestRagReview(@PathVariable Long ticketId) {
+        return service.getLatestReview(ticketId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @ExceptionHandler(AiReviewProviderException.class)

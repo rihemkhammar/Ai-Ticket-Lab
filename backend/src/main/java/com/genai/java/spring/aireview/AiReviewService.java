@@ -5,6 +5,7 @@ import com.genai.java.spring.aireview.advisor.AiReviewAdvisorChain;
 import com.genai.java.spring.aireview.advisor.AiReviewContext;
 import com.genai.java.spring.aireview.dto.AiReviewApiResponse;
 import com.genai.java.spring.aireview.dto.TicketAiReviewResponse;
+import com.genai.java.spring.aireview.prompt.TicketReviewPromptBuilder;
 import com.genai.java.spring.ticket.Ticket;
 import com.genai.java.spring.ticket.TicketService;
 import com.genai.java.spring.user.User;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -85,6 +87,30 @@ public class AiReviewService {
 
         AiReview saved = saveSuccessReview(ticket.getId(), requester.getId(), context.getPromptVersion(), parsed);
 
+        return toApiResponse(saved, parsed);
+    }
+
+    /**
+     * S4-BUG-02: returns the last persisted basic AI review for this ticket,
+     * without calling the LLM again. Used so the frontend can redisplay
+     * old results after navigating away and back instead of showing
+     * nothing until the user clicks "Run" again.
+     */
+    public Optional<AiReviewApiResponse> getLatestReview(Long ticketId) {
+        return repository
+                .findFirstByTicketIdAndPromptVersionOrderByCreatedAtDesc(ticketId, TicketReviewPromptBuilder.PROMPT_VERSION)
+                .map(this::toApiResponseFromStored);
+    }
+
+    private AiReviewApiResponse toApiResponseFromStored(AiReview saved) {
+        TicketAiReviewResponse parsed = null;
+        if (saved.getResultJson() != null) {
+            try {
+                parsed = objectMapper.readValue(saved.getResultJson(), TicketAiReviewResponse.class);
+            } catch (Exception e) {
+                log.warn("Failed to deserialize stored AI review resultJson for reviewId={}", saved.getId(), e);
+            }
+        }
         return toApiResponse(saved, parsed);
     }
 

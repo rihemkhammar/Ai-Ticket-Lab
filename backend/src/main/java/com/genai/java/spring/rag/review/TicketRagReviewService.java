@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -102,6 +103,31 @@ public class TicketRagReviewService {
         AiReview saved = saveSuccessReview(ticket.getId(), requester.getId(), promptVersion, parsed);
 
         return toApiResponse(saved, parsed, evidence);
+    }
+
+    /**
+     * S4-BUG-02: returns the last persisted RAG review for this ticket
+     * without re-running retrieval + the LLM. Note: retrievedEvidence is
+     * NOT re-populated here (it was never persisted, only the model's
+     * structured result was) — the summary/causes/draft/evidenceRefs are
+     * still fully available.
+     */
+    public Optional<RagReviewApiResponse> getLatestReview(Long ticketId) {
+        return repository
+                .findFirstByTicketIdAndPromptVersionOrderByCreatedAtDesc(ticketId, promptBuilder.version())
+                .map(this::toApiResponseFromStored);
+    }
+
+    private RagReviewApiResponse toApiResponseFromStored(AiReview saved) {
+        TicketRagReviewResponse parsed = null;
+        if (saved.getResultJson() != null) {
+            try {
+                parsed = objectMapper.readValue(saved.getResultJson(), TicketRagReviewResponse.class);
+            } catch (Exception e) {
+                log.warn("Failed to deserialize stored RAG review resultJson for reviewId={}", saved.getId(), e);
+            }
+        }
+        return toApiResponse(saved, parsed, List.of());
     }
 
     private AiReview saveFailedReview(Long ticketId, UUID triggeredBy, String promptVersion, String errorMessage) {

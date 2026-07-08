@@ -104,6 +104,27 @@ class TicketEvidenceRetrieverTest {
         assertThat(result.get(0).getSimilarityScore()).isGreaterThan(result.get(1).getSimilarityScore());
     }
 
+    // ── S4-G03: retrieve(ticket, topK) surcharge le top-k configuré ─────────────
+
+    @Test @DisplayName("retrieve(ticket, topK=1) n'utilise qu'un seul chunk même si topK configuré=3")
+    void retrieve_withExplicitTopKOne_overridesConfiguredTopK() {
+        stubPipeline(List.of(
+                row(1L, 0, "MOTOR", 0.1), row(2L, 0, "PUMP", 0.2), row(3L, 0, "SENSOR", 0.3)
+        ));
+        List<EvidenceChunkResponse> result = retriever.retrieve(ticket("Motor", "issue"), 1);
+        assertThat(result).hasSize(1);
+    }
+
+    @Test @DisplayName("retrieve(ticket, topK) clamp les valeurs invalides (<=0 ou trop grandes)")
+    void retrieve_withExplicitTopK_isClamped() {
+        stubPipeline(List.of(
+                row(1L, 0, "MOTOR", 0.1), row(2L, 0, "PUMP", 0.2)
+        ));
+        // topK=0 (ou négatif) doit être ramené à 1 minimum, pas planter ni tout retourner.
+        List<EvidenceChunkResponse> result = retriever.retrieve(ticket("Motor", "issue"), 0);
+        assertThat(result).hasSizeLessThanOrEqualTo(1);
+    }
+
     // ── Nouveau test : prouve la correction du doublon (S3-F05 fix) ────────────
 
     @Test @DisplayName("le même Set usedIndexes est partagé entre tous les appels stitch() d'un même ticket")

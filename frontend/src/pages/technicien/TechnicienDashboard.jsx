@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { getCurrentUser, getAllTickets, getAllArticles } from '../../services/api';
+import { getCurrentUser, getAllTickets, getAllArticles, getArticleIndexStatus } from '../../services/api';
 import { TbArrowRight } from 'react-icons/tb';
 
 import TicketStats  from '../../components/tickets/TicketStats';
@@ -18,10 +18,11 @@ export default function TechnicianDashboard() {
   const user     = getCurrentUser();
   const username = user?.username ?? 'Technician';
 
-  const [tickets,  setTickets]  = useState([]);
-  const [articles, setArticles] = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState(null);
+  const [tickets,     setTickets]     = useState([]);
+  const [articles,    setArticles]    = useState([]);
+  const [chunksTotal, setChunksTotal] = useState(0); // S4-BUG-01: real DB count
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
 
   /* ── Fetch ── */
   useEffect(() => {
@@ -31,12 +32,17 @@ export default function TechnicianDashboard() {
       setLoading(true);
       setError(null);
       try {
-        const [ticketData, articleData] = await Promise.all([getAllTickets(), getAllArticles()]);
+        const [ticketData, articleData, status] = await Promise.all([
+          getAllTickets(),
+          getAllArticles(),
+          getArticleIndexStatus().catch(() => null),
+        ]);
         const ticketList  = Array.isArray(ticketData)  ? ticketData  : (ticketData?.data  ?? ticketData?.content  ?? []);
         const articleList = Array.isArray(articleData) ? articleData : (articleData?.data ?? articleData?.content ?? []);
         if (!cancelled) {
           setTickets(ticketList);
           setArticles(articleList);
+          if (status) setChunksTotal(status.chunksTotal ?? 0);
         }
       } catch (err) {
         console.error('[TechnicianDashboard] load error:', err);
@@ -134,7 +140,7 @@ export default function TechnicianDashboard() {
       {/* ── Knowledge articles ── */}
       <SectionHeader title="Knowledge articles" to="/technician/articles" />
        {/* Article stats */}
-      <ArticleStats articles={articles} />
+      <ArticleStats articles={articles} totalChunks={chunksTotal} />
 
       
 

@@ -44,11 +44,11 @@ public class TicketAgentPromptBuilder {
     }
 
     public String buildTaskPrompt(Long ticketId,
-                                   String userGoal,
-                                   TicketLookupResult ticket,
-                                   List<EvidenceChunkResponse> evidence,
-                                   PreviousAiReviewResult previousReviews,
-                                   RecommendationBoundaryResult boundaries) {
+                                  String userGoal,
+                                  TicketLookupResult ticket,
+                                  List<EvidenceChunkResponse> evidence,
+                                  PreviousAiReviewResult previousReviews,
+                                  RecommendationBoundaryResult boundaries) {
 
         return """
                 Investigate maintenance ticket %d.
@@ -89,21 +89,28 @@ public class TicketAgentPromptBuilder {
                 - Do not invent evidence: every sourceRef must come from the
                   retrieved evidence listed above. If none was retrieved,
                   evidenceRefs must be an empty array.
+                - If evidence WAS retrieved above but you find none of it
+                  directly relevant, leave evidenceRefs empty AND add a
+                  limitation explicitly stating that the retrieved evidence
+                  was not directly applicable (e.g. "Retrieved evidence was
+                  not directly applicable to this ticket, so no evidence
+                  references are cited."). Never leave evidenceRefs empty
+                  silently when evidence was retrieved.
                 - recommendedNextSteps must only contain items consistent with
                   the allowed recommendations above.
                 - Never include anything from the forbidden actions list.
                 - previousReviewSummary should briefly reflect the previous AI
                   reviews above, or state that none exist.
                 """.formatted(
-                        ticketId,
-                        userGoal,
-                        ticket.getTitle(),
-                        ticket.getDescription(),
-                        ticket.getStatus(),
-                        renderEvidence(evidence),
-                        renderPreviousReviews(previousReviews),
-                        boundaries.getAllowedRecommendations(),
-                        boundaries.getForbiddenActions());
+                ticketId,
+                userGoal,
+                ticket.getTitle(),
+                ticket.getDescription(),
+                ticket.getStatus(),
+                renderEvidence(evidence),
+                renderPreviousReviews(previousReviews),
+                boundaries.getAllowedRecommendations(),
+                boundaries.getForbiddenActions());
     }
 
     private String renderEvidence(List<EvidenceChunkResponse> evidence) {
@@ -128,7 +135,7 @@ public class TicketAgentPromptBuilder {
         StringBuilder sb = new StringBuilder();
         for (var r : previousReviews.getReviews()) {
             sb.append("- [").append(r.getStatus()).append("] ").append(r.getCreatedAt())
-              .append(" — ").append(r.getSummary()).append("\n");
+                    .append(" — ").append(r.getSummary()).append("\n");
         }
         return sb.toString().trim();
     }

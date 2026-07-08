@@ -3,35 +3,51 @@ package com.genai.java.spring.agent;
 import com.genai.java.spring.agent.dto.TicketAgentSynthesisResult;
 import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
 import com.genai.java.spring.rag.review.dto.EvidenceRef;
+import com.genai.java.spring.shared.advisor.HumanReviewPolicy;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Validates the final agent synthesis output .
+ * Validates the final agent synthesis output.
  * Enforces structural completeness, evidence-reference honesty, and the
  * forbidden-claim guardrail that keeps the agent strictly advisory.
+ *
+ * L'invariant "needsHumanReview / limitations" est délégué à
+ * HumanReviewPolicy (partagé avec aireview) pour éviter une deuxième
+ * copie de cette règle de sécurité.
  */
 @Component
+@RequiredArgsConstructor
 public class AgentOutputValidator {
 
-    private static final List<String> FORBIDDEN_CLAIM_PHRASES = List.of(
-            "ticket is closed",
-            "ticket has been closed",
-            "ticket has been resolved",
-            "ticket is resolved",
-            "repair completed",
-            "repair has been completed",
-            "maintenance action was performed",
-            "maintenance has been performed",
-            "work order completed",
-            "approved",
-            "no human review needed",
-            "no human review is needed",
-            "human review is not needed",
-            "human review is unnecessary"
+    private final HumanReviewPolicy humanReviewPolicy;
+
+    /**
+     * Regex-based guardrail (S4-G02). Exact-phrase matching missed common
+     * variants ("ticket was closed", "repair is complete", "work is
+     * complete", ...). Patterns are matched against a whitespace-normalized,
+     * lower-cased haystack, and each tolerates the is/was/has been/have been
+     * auxiliary forms so paraphrases of the same claim are still caught.
+     */
+    private static final List<Pattern> FORBIDDEN_CLAIM_PATTERNS = List.of(
+            // ticket (is|was|has been|have been)? closed/resolved
+            Pattern.compile("\\bticket[s]?\\s+(?:is|was|has been|have been)?\\s*(?:already\\s+)?(?:closed|resolved)\\b"),
+            // repair / work / work order / maintenance (action) (is|was|...)? complete(d)/done/finished
+            Pattern.compile("\\b(?:repair|work order|work item|work|maintenance action|maintenance)\\s+" +
+                    "(?:is|was|has been|have been)?\\s*(?:already\\s+)?(?:complete|completed|done|finished|performed)\\b"),
+            // maintenance action was performed / maintenance has been performed (explicit story phrase)
+            Pattern.compile("\\bmaintenance\\s+(?:action\\s+)?(?:was|has been|have been)\\s+performed\\b"),
+            // no human review needed/necessary/required
+            Pattern.compile("\\bno human review\\s+(?:is|was)?\\s*(?:needed|necessary|required)\\b"),
+            // human review is not needed / unnecessary / not required
+            Pattern.compile("\\bhuman review\\s+(?:is|was)?\\s*(?:not\\s+(?:needed|necessary|required)|unnecessary)\\b"),
+            // bare "approved" claim
+            Pattern.compile("\\bapproved\\b")
     );
 
     public void validate(TicketAgentSynthesisResult result, List<EvidenceChunkResponse> retrievedEvidence) {
@@ -43,9 +59,9 @@ public class AgentOutputValidator {
         validateEvidenceReferences(result, retrievedEvidence);
         validateForbiddenClaims(result);
 
-        if (result.getNeedsHumanReview() == null || !result.getNeedsHumanReview()) {
-            throw new AgentValidationException("Agent response needsHumanReview must be true.");
-        }
+        humanReviewPolicy.requireHumanReview(result.getNeedsHumanReview(), msg -> {
+            throw new AgentValidationException(msg);
+        });
     }
 
     private void validateStructure(TicketAgentSynthesisResult result) {
@@ -57,12 +73,14 @@ public class AgentOutputValidator {
             throw new AgentValidationException("draftTechnicianResponse must not be blank.");
         if (result.getConfidence() == null)
             throw new AgentValidationException("confidence must be LOW, MEDIUM, or HIGH.");
-        if (isEmpty(result.getLimitations()))
-            throw new AgentValidationException("limitations must not be empty.");
+
+        humanReviewPolicy.requireLimitations(result.getLimitations(), msg -> {
+            throw new AgentValidationException(msg);
+        });
     }
 
     private void validateEvidenceReferences(TicketAgentSynthesisResult result,
-                                             List<EvidenceChunkResponse> retrievedEvidence) {
+                                            List<EvidenceChunkResponse> retrievedEvidence) {
         boolean evidenceWasRetrieved = retrievedEvidence != null && !retrievedEvidence.isEmpty();
         List<EvidenceRef> returnedRefs = result.getEvidenceRefs();
         boolean hasReturnedRefs = returnedRefs != null && !returnedRefs.isEmpty();
@@ -76,8 +94,11 @@ public class AgentOutputValidator {
         }
 
         if (!hasReturnedRefs) {
-            // Evidence may exist but not be directly cited; that's acceptable as
-            // long as nothing invented is returned. Nothing further to check.
+            if (!limitationsExplainMissingEvidence(result.getLimitations())) {
+                throw new AgentValidationException(
+                        "Evidence was retrieved but evidenceRefs is empty and no limitation "
+                                + "explains why no evidence was cited.");
+            }
             return;
         }
 
@@ -94,6 +115,27 @@ public class AgentOutputValidator {
         }
     }
 
+    /**
+     * A limitation only counts as an explanation if it mentions "evidence"
+     * together with a phrase indicating none was cited/applicable — merely
+     * mentioning "evidence" in passing (e.g. "top-3 evidence chunks were
+     * considered") is not an explanation for withholding evidenceRefs.
+     */
+    private static final Pattern EVIDENCE_NOT_CITED_PATTERN = Pattern.compile(
+            "evidence.*(?:not (?:directly )?(?:applicable|relevant|cited)|no (?:relevant|matching) evidence|" +
+                    "no evidence (?:references|refs)?\\s*(?:are|were|is|was)?\\s*cited|none (?:of the )?(?:retrieved )?evidence)" +
+                    "|(?:not (?:directly )?(?:applicable|relevant)|no (?:relevant|matching)|none) .*evidence");
+
+    private boolean limitationsExplainMissingEvidence(List<String> limitations) {
+        if (limitations == null) {
+            return false;
+        }
+        return limitations.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::toLowerCase)
+                .anyMatch(l -> EVIDENCE_NOT_CITED_PATTERN.matcher(l).find());
+    }
+
     private void validateForbiddenClaims(TicketAgentSynthesisResult result) {
         String haystack = String.join(" \n",
                 nullToEmpty(result.getInvestigationSummary()),
@@ -101,12 +143,12 @@ public class AgentOutputValidator {
                 nullToEmpty(result.getDraftTechnicianResponse()),
                 String.join(" ", result.getRecommendedNextSteps() == null ? List.of() : result.getRecommendedNextSteps()),
                 String.join(" ", result.getLimitations() == null ? List.of() : result.getLimitations())
-        ).toLowerCase();
+        ).toLowerCase().replaceAll("\\s+", " ").trim();
 
-        for (String phrase : FORBIDDEN_CLAIM_PHRASES) {
-            if (haystack.contains(phrase)) {
+        for (Pattern pattern : FORBIDDEN_CLAIM_PATTERNS) {
+            if (pattern.matcher(haystack).find()) {
                 throw new AgentValidationException(
-                        "Agent output contains a forbidden claim: \"" + phrase + "\".");
+                        "Agent output contains a forbidden claim matching pattern: \"" + pattern.pattern() + "\".");
             }
         }
     }

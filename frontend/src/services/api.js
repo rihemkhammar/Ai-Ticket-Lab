@@ -160,6 +160,13 @@ export const runAiReview = async (ticketId) => {
   return response.data;
 };
 
+// GET /api/tickets/:id/ai-review/basic — dernier review basic déjà stocké
+// (204 si aucun) — pour réafficher un ancien résultat sans relancer le LLM.
+export const getLatestAiReview = async (ticketId) => {
+  const response = await api.get(`/api/tickets/${ticketId}/ai-review/basic`);
+  return response.status === 204 ? null : response.data;
+};
+
 // Knowledge Articles 
 
 // GET /api/articles — liste tous les articles de connaissance
@@ -181,6 +188,14 @@ export const indexArticles = async () => {
   return response.data;
 };
 
+// GET /api/articles/index/status — vrai total (articles + chunks) lu en
+// base de données, à utiliser à chaque chargement de page au lieu du
+// résultat éphémère du dernier indexage (qui disparaît à la navigation).
+export const getArticleIndexStatus = async () => {
+  const response = await api.get("/api/articles/index/status");
+  return response.data; // { articlesTotal, chunksTotal }
+};
+
 // Evidence (debug retrieval) 
 
 // GET /api/tickets/:id/evidence — chunks pertinents récupérés pour un ticket (debug, sans appel GPT)
@@ -199,11 +214,25 @@ export const runRagReview = async (ticketId) => {
   return response.data;
 };
 
+// GET /api/tickets/:id/ai-review/rag — dernier RAG review déjà stocké
+// (204 si aucun) — pour réafficher un ancien résultat sans relancer le LLM.
+export const getLatestRagReview = async (ticketId) => {
+  const response = await api.get(`/api/tickets/${ticketId}/ai-review/rag`);
+  return response.status === 204 ? null : response.data;
+};
+
 // Agentic Ticket Investigation 
 
 export const runAgentInvestigation = async (ticketId, options = {}) => {
   const response = await api.post(`/api/tickets/${ticketId}/agent/investigate`, options);
   return response.data;
+};
+
+// GET /api/tickets/:id/agent/investigate — dernière investigation agent
+// déjà stockée (204 si aucune) — pour réafficher sans relancer l'agent.
+export const getLatestAgentRun = async (ticketId) => {
+  const response = await api.get(`/api/tickets/${ticketId}/agent/investigate`);
+  return response.status === 204 ? null : response.data;
 };
 
 

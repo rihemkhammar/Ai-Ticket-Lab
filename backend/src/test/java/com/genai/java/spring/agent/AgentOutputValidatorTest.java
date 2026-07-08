@@ -7,6 +7,8 @@ import com.genai.java.spring.rag.review.dto.EvidenceRef;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import com.genai.java.spring.shared.advisor.HumanReviewPolicy;
+
 
 import java.util.List;
 
@@ -18,8 +20,7 @@ class AgentOutputValidatorTest {
     private AgentOutputValidator validator;
 
     @BeforeEach
-    void setUp() { validator = new AgentOutputValidator(); }
-
+    void setUp() { validator = new AgentOutputValidator(new HumanReviewPolicy()); }
     private EvidenceChunkResponse chunk() {
         return EvidenceChunkResponse.of(1L, 0, "text", "Motor Guide", "MOTOR", 0.9);
     }
@@ -180,5 +181,79 @@ class AgentOutputValidatorTest {
         assertThatThrownBy(() -> validator.validate(r, List.of()))
                 .isInstanceOf(AgentValidationException.class)
                 .hasMessageContaining("forbidden claim");
+    }
+
+    // ── forbidden-claim guardrail: phrase variants (S4-G02) ─────────────────────
+
+    @Test
+    @DisplayName("claiming 'ticket was closed' -> fails")
+    void claimTicketWasClosed_fails() {
+        TicketAgentSynthesisResult r = validResult();
+        r.setInvestigationSummary("The ticket was closed once the inspection finished.");
+        assertThatThrownBy(() -> validator.validate(r, List.of()))
+                .isInstanceOf(AgentValidationException.class)
+                .hasMessageContaining("forbidden claim");
+    }
+
+    @Test
+    @DisplayName("claiming 'ticket was resolved' -> fails")
+    void claimTicketWasResolved_fails() {
+        TicketAgentSynthesisResult r = validResult();
+        r.setDraftTechnicianResponse("The ticket was resolved after replacing the fan.");
+        assertThatThrownBy(() -> validator.validate(r, List.of()))
+                .isInstanceOf(AgentValidationException.class)
+                .hasMessageContaining("forbidden claim");
+    }
+
+    @Test
+    @DisplayName("claiming 'repair is complete' -> fails")
+    void claimRepairIsComplete_fails() {
+        TicketAgentSynthesisResult r = validResult();
+        r.setDraftTechnicianResponse("The repair is complete, no further action needed on our side.");
+        assertThatThrownBy(() -> validator.validate(r, List.of()))
+                .isInstanceOf(AgentValidationException.class)
+                .hasMessageContaining("forbidden claim");
+    }
+
+    @Test
+    @DisplayName("claiming 'work is complete' -> fails")
+    void claimWorkIsComplete_fails() {
+        TicketAgentSynthesisResult r = validResult();
+        r.setInvestigationSummary("Work is complete on the ventilation unit.");
+        assertThatThrownBy(() -> validator.validate(r, List.of()))
+                .isInstanceOf(AgentValidationException.class)
+                .hasMessageContaining("forbidden claim");
+    }
+
+    @Test
+    @DisplayName("claiming 'work order completed' -> fails")
+    void claimWorkOrderCompleted_fails() {
+        TicketAgentSynthesisResult r = validResult();
+        r.setRecommendedNextSteps(List.of("work order completed, close out the file"));
+        assertThatThrownBy(() -> validator.validate(r, List.of()))
+                .isInstanceOf(AgentValidationException.class)
+                .hasMessageContaining("forbidden claim");
+    }
+
+    // ── evidence reference honesty: missing refs without explanation (S4-G04) ──
+
+    @Test
+    @DisplayName("evidence retrieved but no refs and no limitation explaining it -> fails")
+    void evidenceRetrievedNoRefsNoExplanation_fails() {
+        TicketAgentSynthesisResult r = validResult();
+        r.setEvidenceRefs(List.of());
+        r.setLimitations(List.of("Only top-3 evidence chunks were considered."));
+        assertThatThrownBy(() -> validator.validate(r, List.of(chunk())))
+                .isInstanceOf(AgentValidationException.class)
+                .hasMessageContaining("evidenceRefs");
+    }
+
+    @Test
+    @DisplayName("evidence retrieved, no refs, but limitation explains why -> passes")
+    void evidenceRetrievedNoRefsWithExplanation_passes() {
+        TicketAgentSynthesisResult r = validResult();
+        r.setEvidenceRefs(List.of());
+        r.setLimitations(List.of("Retrieved evidence was not directly applicable to this ticket, so no evidence references are cited."));
+        assertThatNoException().isThrownBy(() -> validator.validate(r, List.of(chunk())));
     }
 }

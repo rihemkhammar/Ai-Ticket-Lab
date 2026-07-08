@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { TbRefresh, TbCircleCheck, TbBrain, TbX, TbRobot, TbSearch, TbAlertTriangle, TbCheck,TbPin, TbListCheck, TbTool } from 'react-icons/tb';
 import { STATUS_CONFIG } from './Ticketconstants';
-import { updateTicketStatus, runAiReview, runRagReview, getTicketEvidence, runAgentInvestigation } from '../../services/api';
+import {
+  updateTicketStatus, runAiReview, runRagReview, getTicketEvidence, runAgentInvestigation,
+  getLatestAiReview, getLatestRagReview, getLatestAgentRun,
+} from '../../services/api';
 
 const CONFIDENCE_CONFIG = {
   LOW:    { label: 'Low',    color: '#f87171' },
@@ -31,13 +34,39 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
   const [agentLoading,    setAgentLoading]    = useState(false);
   const [agentError,      setAgentError]      = useState(null);
 
+  // S4-BUG-02: on ticket change, reload any previously-stored results from
+  // the backend instead of just wiping them to null. Evidence is cheap to
+  // recompute live and isn't persisted, so it stays reset until the user
+  // clicks "Get Evidence" again.
   useEffect(() => {
-    setAiResult(null);      setAiError(null);      setAiLoading(false);
-    setRagResult(null);     setRagError(null);     setRagLoading(false);
+    let cancelled = false;
+
+    setAiError(null);       setAiLoading(false);
+    setRagError(null);      setRagLoading(false);
     setEvidenceResult(null);setEvidenceError(null);setEvidenceLoading(false);
-    setAgentResult(null);   setAgentError(null);   setAgentLoading(false);
+    setAgentError(null);    setAgentLoading(false);
     setModalOpen(false);
     setActiveTab('AI Review');
+
+    if (!ticket?.id) {
+      setAiResult(null); setRagResult(null); setAgentResult(null);
+      return;
+    }
+
+    setAiResult(null); setRagResult(null); setAgentResult(null);
+
+    Promise.allSettled([
+      getLatestAiReview(ticket.id),
+      getLatestRagReview(ticket.id),
+      getLatestAgentRun(ticket.id),
+    ]).then(([ai, rag, agent]) => {
+      if (cancelled) return;
+      if (ai.status === 'fulfilled' && ai.value) setAiResult(ai.value);
+      if (rag.status === 'fulfilled' && rag.value) setRagResult(rag.value);
+      if (agent.status === 'fulfilled' && agent.value) setAgentResult(agent.value);
+    });
+
+    return () => { cancelled = true; };
   }, [ticket?.id]);
 
   if (!ticket) return null;

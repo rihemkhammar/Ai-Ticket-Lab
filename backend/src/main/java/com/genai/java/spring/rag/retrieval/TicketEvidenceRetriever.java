@@ -34,28 +34,50 @@ public class TicketEvidenceRetriever {
         this.neighborStitchingService = neighborStitchingService;
     }
 
+    /** Maximum topK an agent request is allowed to ask for, regardless of app.rag.top-k. */
+    private static final int MAX_REQUESTED_TOP_K = 10;
+
     public List<EvidenceChunkResponse> retrieve(Ticket ticket) {
+        return retrieve(ticket, topK);
+    }
 
-            String query = buildQuery(ticket);
+    /**
+     * S4-G03: honors a caller-supplied topK (e.g. from the agent investigation
+     * request) instead of always falling back to the configured
+     * app.rag.top-k. The requested value is clamped to a sane range so a
+     * caller cannot force an unbounded rerank/evidence payload.
+     */
+    public List<EvidenceChunkResponse> retrieve(Ticket ticket, int requestedTopK) {
 
-            List<VectorSearchRow> fused = hybridSearchService.search(query, fusedPoolSize);
-            List<VectorSearchRow> reranked = rerankerService.rerank(query, fused, topK);
+        int effectiveTopK = clampTopK(requestedTopK);
 
-            Set<String> usedIndexes = new HashSet<>(); // ← nouveau : suivi global pour ce ticket
+        String query = buildQuery(ticket);
 
-            List<EvidenceChunkResponse> evidence = reranked.stream()
-                    .map(row -> {
-                        EvidenceChunkResponse dto = EvidenceChunkResponse.of(
-                                row.articleId(), row.chunkIndex(), row.text(),
-                                row.articleTitle(), row.category(),
-                                toSimilarityScore(row.distance()));
-                        dto.setExpandedText(neighborStitchingService.stitch(row, usedIndexes)); // ← passe le Set
-                        return dto;
-                    })
-                    .toList();
-        log.info("Retrieved {} evidence chunks for ticketId={} (hybrid+rerank+neighbor-stitching)",
-                evidence.size(), ticket.getId());
+        List<VectorSearchRow> fused = hybridSearchService.search(query, fusedPoolSize);
+        List<VectorSearchRow> reranked = rerankerService.rerank(query, fused, effectiveTopK);
+
+        Set<String> usedIndexes = new HashSet<>(); // ← nouveau : suivi global pour ce ticket
+
+        List<EvidenceChunkResponse> evidence = reranked.stream()
+                .map(row -> {
+                    EvidenceChunkResponse dto = EvidenceChunkResponse.of(
+                            row.articleId(), row.chunkIndex(), row.text(),
+                            row.articleTitle(), row.category(),
+                            toSimilarityScore(row.distance()));
+                    dto.setExpandedText(neighborStitchingService.stitch(row, usedIndexes)); // ← passe le Set
+                    return dto;
+                })
+                .toList();
+        log.info("Retrieved {} evidence chunks for ticketId={} (hybrid+rerank+neighbor-stitching, topK={})",
+                evidence.size(), ticket.getId(), effectiveTopK);
         return evidence;
+    }
+
+    private int clampTopK(int requestedTopK) {
+        if (requestedTopK < 1) {
+            return 1;
+        }
+        return Math.min(requestedTopK, MAX_REQUESTED_TOP_K);
     }
 
     private String buildQuery(Ticket ticket) {

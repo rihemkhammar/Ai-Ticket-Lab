@@ -1,5 +1,6 @@
 package com.genai.java.spring.agent.tool;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genai.java.spring.agent.tool.dto.PreviousAiReviewResult;
 import com.genai.java.spring.aireview.AiReview;
 import com.genai.java.spring.aireview.AiReviewRepository;
@@ -34,7 +35,7 @@ class PreviousAiReviewToolTest {
 
     @BeforeEach
     void setUp() {
-        tool = new PreviousAiReviewTool(aiReviewRepository);
+        tool = new PreviousAiReviewTool(aiReviewRepository, new ObjectMapper());
     }
 
     private AiReview review(Long id, AiReviewStatus status, String resultJson) {
@@ -78,6 +79,36 @@ class PreviousAiReviewToolTest {
         assertThat(result.getReviews().get(0).getSummary())
                 .doesNotContain("Exception")
                 .contains("failed validation or provider call");
+    }
+
+    @Test
+    @DisplayName("malformed resultJson -> falls back to safe generic text, never the raw JSON")
+    void loadRecent_malformedJson_doesNotLeakRawJson() {
+        AiReview success = review(14L, AiReviewStatus.SUCCESS, "{not-valid-json,,,");
+        when(aiReviewRepository.findByTicketIdOrderByCreatedAtDesc(eq(TICKET_ID), any(Pageable.class)))
+                .thenReturn(List.of(success));
+
+        PreviousAiReviewResult result = tool.loadRecent(TICKET_ID, 3);
+
+        assertThat(result.getReviews().get(0).getSummary())
+                .doesNotContain("not-valid-json")
+                .contains("no readable summary");
+    }
+
+    @Test
+    @DisplayName("resultJson without a summary field -> falls back to safe generic text, never raw JSON")
+    void loadRecent_missingSummaryField_doesNotLeakRawJson() {
+        AiReview success = review(15L, AiReviewStatus.SUCCESS,
+                "{\"possibleCauses\":[\"fan failure\"],\"confidence\":\"LOW\"}");
+        when(aiReviewRepository.findByTicketIdOrderByCreatedAtDesc(eq(TICKET_ID), any(Pageable.class)))
+                .thenReturn(List.of(success));
+
+        PreviousAiReviewResult result = tool.loadRecent(TICKET_ID, 3);
+
+        assertThat(result.getReviews().get(0).getSummary())
+                .doesNotContain("possibleCauses")
+                .doesNotContain("fan failure")
+                .contains("no readable summary");
     }
 
     @Test

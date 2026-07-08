@@ -16,6 +16,7 @@ import com.genai.java.spring.agent.tool.dto.RecommendationBoundaryResult;
 import com.genai.java.spring.agent.tool.dto.TicketEvidenceResult;
 import com.genai.java.spring.agent.tool.dto.TicketLookupResult;
 import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
+import com.genai.java.spring.shared.advisor.PromptInjectionGuard;
 import com.genai.java.spring.ticket.Ticket;
 import com.genai.java.spring.ticket.TicketNotFoundException;
 import com.genai.java.spring.ticket.TicketService;
@@ -29,13 +30,15 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
- * TicketAgentInvestigationService — story §5.4.
+ * TicketAgentInvestigationService .
  *
- * Controlled chain (§5.3):
  *  1. Create agent_run RUNNING
  *  2. Load ticket        (TicketLookupTool)
+ *  2b. Scan ticket text for prompt-injection patterns (non-blocking, audit only)
  *  3. Retrieve evidence  (TicketEvidenceTool)
  *  4. Load previous reviews (PreviousAiReviewTool)
  *  5. Load boundaries    (TicketRecommendationBoundaryTool)
@@ -58,22 +61,24 @@ public class TicketAgentInvestigationService {
     private final PreviousAiReviewTool previousAiReviewTool;
     private final TicketRecommendationBoundaryTool boundaryTool;
     private final TicketAgentPromptBuilder promptBuilder;
+    private final PromptInjectionGuard promptInjectionGuard;
     private final AgentOutputValidator validator;
     private final AgentRunRepository agentRunRepository;
     private final AgentToolCallRepository agentToolCallRepository;
     private final ObjectMapper objectMapper;
 
     public TicketAgentInvestigationService(@Qualifier("openAIChatClient") ChatClient chatClient,
-                                            TicketService ticketService,
-                                            TicketLookupTool ticketLookupTool,
-                                            TicketEvidenceTool ticketEvidenceTool,
-                                            PreviousAiReviewTool previousAiReviewTool,
-                                            TicketRecommendationBoundaryTool boundaryTool,
-                                            TicketAgentPromptBuilder promptBuilder,
-                                            AgentOutputValidator validator,
-                                            AgentRunRepository agentRunRepository,
-                                            AgentToolCallRepository agentToolCallRepository,
-                                            ObjectMapper objectMapper) {
+                                           TicketService ticketService,
+                                           TicketLookupTool ticketLookupTool,
+                                           TicketEvidenceTool ticketEvidenceTool,
+                                           PreviousAiReviewTool previousAiReviewTool,
+                                           TicketRecommendationBoundaryTool boundaryTool,
+                                           TicketAgentPromptBuilder promptBuilder,
+                                           PromptInjectionGuard promptInjectionGuard,
+                                           AgentOutputValidator validator,
+                                           AgentRunRepository agentRunRepository,
+                                           AgentToolCallRepository agentToolCallRepository,
+                                           ObjectMapper objectMapper) {
         this.chatClient = chatClient;
         this.ticketService = ticketService;
         this.ticketLookupTool = ticketLookupTool;
@@ -81,6 +86,7 @@ public class TicketAgentInvestigationService {
         this.previousAiReviewTool = previousAiReviewTool;
         this.boundaryTool = boundaryTool;
         this.promptBuilder = promptBuilder;
+        this.promptInjectionGuard = promptInjectionGuard;
         this.validator = validator;
         this.agentRunRepository = agentRunRepository;
         this.agentToolCallRepository = agentToolCallRepository;
@@ -89,12 +95,10 @@ public class TicketAgentInvestigationService {
 
     public TicketAgentInvestigationResponse investigate(Long ticketId, TicketAgentInvestigationRequest request) {
 
-        // Fail fast if the ticket does not exist — no agent_run is created for a bad id.
         if (!ticketExists(ticketId)) {
             throw new TicketNotFoundException(ticketId);
         }
 
-        // Step 1 — create agent_run RUNNING
         AgentRun run = new AgentRun();
         run.setTicketId(ticketId);
         run.setPromptVersion(promptBuilder.version());
@@ -106,18 +110,23 @@ public class TicketAgentInvestigationService {
         List<AgentToolCallTrace> traceForResponse = new ArrayList<>();
 
         try {
-            // Step 2 — ticket lookup
             TicketLookupResult ticketResult = runTool(run.getId(), TicketLookupTool.NAME,
                     ticketId, () -> ticketLookupTool.lookup(ticketId), traceForResponse);
 
             Ticket ticket = ticketService.findById(ticketId);
 
-            // Step 3 — evidence retrieval
+            // Step 2b — anti prompt-injection audit (non-blocking, mêmes patterns
+            // que côté aireview via PromptInjectionGuard).
+            List<String> injectionFlags = promptInjectionGuard.scan(ticket.getTitle(), ticket.getDescription());
+            if (!injectionFlags.isEmpty()) {
+                log.warn("[TicketAgentInvestigationService] SUSPICIOUS ticketId={} patterns={}",
+                        ticketId, injectionFlags);
+            }
+
             TicketEvidenceResult evidenceResult = runTool(run.getId(), TicketEvidenceTool.NAME,
                     ticketId, () -> ticketEvidenceTool.retrieve(ticket, request.getTopK()), traceForResponse);
             List<EvidenceChunkResponse> evidence = evidenceResult.getEvidence();
 
-            // Step 4 — previous AI reviews (optional per request flag)
             PreviousAiReviewResult previousReviews;
             if (request.getIncludePreviousReviews()) {
                 previousReviews = runTool(run.getId(), PreviousAiReviewTool.NAME,
@@ -126,11 +135,9 @@ public class TicketAgentInvestigationService {
                 previousReviews = PreviousAiReviewResult.of(ticketId, Collections.emptyList());
             }
 
-            // Step 5 — recommendation boundaries
             RecommendationBoundaryResult boundaries = runTool(run.getId(),
                     TicketRecommendationBoundaryTool.NAME, ticketId, boundaryTool::load, traceForResponse);
 
-            // Step 6 — GPT final synthesis
             String systemPrompt = promptBuilder.buildSystemPrompt();
             String taskPrompt = promptBuilder.buildTaskPrompt(
                     ticketId, request.getUserGoal(), ticketResult, evidence, previousReviews, boundaries);
@@ -148,7 +155,6 @@ public class TicketAgentInvestigationService {
                 return failRun(run, "AI provider failed or returned invalid output.", traceForResponse);
             }
 
-            // Step 7 — validate final output
             try {
                 validator.validate(synthesis, evidence);
             } catch (AgentValidationException e) {
@@ -156,17 +162,65 @@ public class TicketAgentInvestigationService {
                 return failRun(run, e.getMessage(), traceForResponse);
             }
 
-            // Step 8 — persist SUCCESS and return
             return succeedRun(run, synthesis, traceForResponse);
 
         } catch (AgentToolException e) {
-            // A required tool failed in a controlled way.
             log.warn("Agent tool failure for ticketId={} reason={}", ticketId, e.getMessage());
             return failRun(run, e.getMessage(), traceForResponse);
         } catch (Exception e) {
             log.error("Unexpected agent failure for ticketId={}", ticketId, e);
             return failRun(run, "Agent investigation failed unexpectedly.", traceForResponse);
         }
+    }
+
+    /**
+     * S4-BUG-02: returns the last persisted agent run for this ticket
+     * without re-running the investigation (no new tool calls, no new
+     * LLM call). Used so the frontend can redisplay old results after
+     * navigating away and back.
+     */
+    public Optional<TicketAgentInvestigationResponse> getLatestRun(Long ticketId) {
+        return agentRunRepository.findFirstByTicketIdOrderByCreatedAtDesc(ticketId)
+                .map(this::toResponseFromStored);
+    }
+
+    private TicketAgentInvestigationResponse toResponseFromStored(AgentRun run) {
+        List<AgentToolCallTrace> trace = agentToolCallRepository
+                .findByAgentRunIdOrderByStartedAtAsc(run.getId())
+                .stream()
+                .map(tc -> new AgentToolCallTrace(tc.getToolName(), tc.getStatus().name(),
+                        tc.getErrorMessage(), tc.getStartedAt(), tc.getCompletedAt()))
+                .collect(Collectors.toList());
+
+        TicketAgentInvestigationResponse response = new TicketAgentInvestigationResponse();
+        response.setRunId(run.getId());
+        response.setTicketId(run.getTicketId());
+        response.setStatus(run.getStatus());
+        response.setPromptVersion(run.getPromptVersion());
+        response.setModelName(run.getModelName());
+        response.setErrorMessage(run.getErrorMessage());
+        response.setToolCalls(trace);
+        response.setCreatedAt(run.getCreatedAt());
+
+        if (run.getStatus() == AgentRunStatus.SUCCESS && run.getResultJson() != null) {
+            try {
+                TicketAgentSynthesisResult synthesis =
+                        objectMapper.readValue(run.getResultJson(), TicketAgentSynthesisResult.class);
+                response.setInvestigationSummary(synthesis.getInvestigationSummary());
+                response.setEvidenceRefs(synthesis.getEvidenceRefs());
+                response.setPreviousReviewSummary(synthesis.getPreviousReviewSummary());
+                response.setRecommendedNextSteps(synthesis.getRecommendedNextSteps());
+                response.setDraftTechnicianResponse(synthesis.getDraftTechnicianResponse());
+                response.setConfidence(synthesis.getConfidence());
+                response.setLimitations(synthesis.getLimitations());
+                response.setNeedsHumanReview(synthesis.getNeedsHumanReview());
+            } catch (Exception e) {
+                log.warn("Failed to deserialize stored agent run resultJson for runId={}", run.getId(), e);
+            }
+        } else {
+            response.setNeedsHumanReview(true);
+        }
+        return response;
     }
 
     private boolean ticketExists(Long ticketId) {
@@ -178,28 +232,27 @@ public class TicketAgentInvestigationService {
         }
     }
 
-    /**
-     * Executes a tool call, persists its trace (success or failure), and
-     * appends an operational-only entry (name + status) to the response
-     * trace. Rethrows AgentToolException so the caller can fail the run.
-     */
     private <T> T runTool(Long runId, String toolName, Long ticketId,
-                           ToolCall<T> call, List<AgentToolCallTrace> traceForResponse) {
+                          ToolCall<T> call, List<AgentToolCallTrace> traceForResponse) {
         LocalDateTime startedAt = LocalDateTime.now();
         try {
             T output = call.execute();
+            LocalDateTime completedAt = LocalDateTime.now();
             persistToolCall(runId, toolName, ticketId, output, AgentToolCallStatus.SUCCESS, null, startedAt);
-            traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.SUCCESS.name(), null));
+            traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.SUCCESS.name(), null,
+                    startedAt, completedAt));
             return output;
         } catch (AgentToolException e) {
+            LocalDateTime completedAt = LocalDateTime.now();
             persistToolCall(runId, toolName, ticketId, null, AgentToolCallStatus.FAILED, e.getMessage(), startedAt);
-            traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.FAILED.name(), e.getMessage()));
+            traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.FAILED.name(), e.getMessage(),
+                    startedAt, completedAt));
             throw e;
         }
     }
 
     private void persistToolCall(Long runId, String toolName, Long ticketId, Object output,
-                                  AgentToolCallStatus status, String errorMessage, LocalDateTime startedAt) {
+                                 AgentToolCallStatus status, String errorMessage, LocalDateTime startedAt) {
         AgentToolCall call = new AgentToolCall();
         call.setAgentRunId(runId);
         call.setToolName(toolName);
@@ -222,7 +275,7 @@ public class TicketAgentInvestigationService {
     }
 
     private TicketAgentInvestigationResponse failRun(AgentRun run, String errorMessage,
-                                                       List<AgentToolCallTrace> traceForResponse) {
+                                                     List<AgentToolCallTrace> traceForResponse) {
         run.setStatus(AgentRunStatus.FAILED);
         run.setErrorMessage(errorMessage);
         run.setCompletedAt(LocalDateTime.now());
@@ -243,7 +296,7 @@ public class TicketAgentInvestigationService {
 
     @Transactional
     protected TicketAgentInvestigationResponse succeedRun(AgentRun run, TicketAgentSynthesisResult synthesis,
-                                                           List<AgentToolCallTrace> traceForResponse) {
+                                                          List<AgentToolCallTrace> traceForResponse) {
         run.setStatus(AgentRunStatus.SUCCESS);
         run.setCompletedAt(LocalDateTime.now());
         run.setResultJson(safeWrite(synthesis));

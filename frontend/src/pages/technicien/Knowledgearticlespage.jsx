@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAllArticles, indexArticles } from '../../services/api';
+import { getAllArticles, indexArticles, getArticleIndexStatus } from '../../services/api';
 
 import ArticleStats          from '../../components/articles/Articlestats';
 import ArticleFilters        from '../../components/articles/Articlefilters';
@@ -16,6 +16,10 @@ export default function KnowledgeArticlesPage() {
   const [selectedId,    setSelectedId]    = useState(null);
   const [retry,         setRetry]         = useState(0);
 
+  //  real chunk count from the DB, not the ephemeral result of
+  // the last "index now" call — this is what survives navigation/reload.
+  const [chunksTotal,   setChunksTotal]   = useState(0);
+
   /* ── Indexing state ── */
   const [indexing,      setIndexing]      = useState(false);
   const [indexResult,   setIndexResult]   = useState(null); // { articlesIndexed, chunksCreated }
@@ -29,9 +33,15 @@ export default function KnowledgeArticlesPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getAllArticles();
+        const [data, status] = await Promise.all([
+          getAllArticles(),
+          getArticleIndexStatus().catch(() => null), // status is best-effort, don't block the list
+        ]);
         const list = Array.isArray(data) ? data : (data?.data ?? data?.content ?? []);
-        if (!cancelled) setArticles(list);
+        if (!cancelled) {
+          setArticles(list);
+          if (status) setChunksTotal(status.chunksTotal ?? 0);
+        }
       } catch (err) {
         console.error('[KnowledgeArticlesPage] fetchArticles error:', err);
         if (!cancelled) setError('Failed to load knowledge articles.');
@@ -54,6 +64,13 @@ export default function KnowledgeArticlesPage() {
     try {
       const data = await indexArticles();
       setIndexResult(data);
+      try {
+        const status = await getArticleIndexStatus();
+        setChunksTotal(status?.chunksTotal ?? data?.chunksCreated ?? 0);
+      } catch {
+        // fall back to the just-received indexing result if status fails
+        setChunksTotal(data?.chunksCreated ?? 0);
+      }
       setRetry(r => r + 1); // refresh article list after indexing
     } catch (err) {
       console.error('[KnowledgeArticlesPage] indexArticles error:', err);
@@ -88,7 +105,7 @@ export default function KnowledgeArticlesPage() {
             </p>
           </div>
 
-          {/* S3-G03: Index Articles button */}
+          {/* Index Articles button */}
           <button
             onClick={handleIndex}
             disabled={indexing}
@@ -112,7 +129,7 @@ export default function KnowledgeArticlesPage() {
           </button>
         </div>
 
-        {/* S3-G03: Indexing success summary */}
+        {/*  Indexing success summary */}
         {indexResult && (
           <div style={{
             marginTop: '14px', padding: '14px 18px', borderRadius: '12px',
@@ -133,7 +150,7 @@ export default function KnowledgeArticlesPage() {
           </div>
         )}
 
-        {/* S3-G03: Indexing error */}
+        {/* Indexing error */}
         {indexError && (
           <div style={{
             marginTop: '14px', padding: '14px 18px', borderRadius: '12px',
@@ -152,7 +169,7 @@ export default function KnowledgeArticlesPage() {
       </div>
 
       {/* Stats */}
-<ArticleStats articles={articles} totalChunks={indexResult?.chunksCreated ?? 0} />
+<ArticleStats articles={articles} totalChunks={chunksTotal} />
       {/* Error state */}
       {error && (
         <div style={{

@@ -39,6 +39,8 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import com.genai.java.spring.shared.advisor.PromptInjectionGuard;
+
 
 @ExtendWith(MockitoExtension.class)
 class TicketAgentInvestigationServiceTest {
@@ -66,10 +68,10 @@ class TicketAgentInvestigationServiceTest {
     void setUp() {
         service = new TicketAgentInvestigationService(
                 chatClient, ticketService, ticketLookupTool, ticketEvidenceTool,
-                previousAiReviewTool, boundaryTool, promptBuilder, validator,
+                previousAiReviewTool, boundaryTool, promptBuilder,
+                new PromptInjectionGuard(), validator,
                 agentRunRepository, agentToolCallRepository, new ObjectMapper()
         );
-
         Ticket ticket = mock(Ticket.class);
         lenient().when(ticket.getId()).thenReturn(TICKET_ID);
         lenient().when(ticket.getTitle()).thenReturn("Conveyor motor overheating");
