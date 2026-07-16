@@ -174,7 +174,7 @@ public class TicketAgentInvestigationService {
     }
 
     /**
-     * S4-BUG-02: returns the last persisted agent run for this ticket
+     * returns the last persisted agent run for this ticket
      * without re-running the investigation (no new tool calls, no new
      * LLM call). Used so the frontend can redisplay old results after
      * navigating away and back.

@@ -6,6 +6,7 @@ import {
   updateTicketStatus, runAiReview, runRagReview, getTicketEvidence, runAgentInvestigation,
   getLatestAiReview, getLatestRagReview, getLatestAgentRun,
 } from '../../services/api';
+import HitlReviewPanel from './hitl/HitlReviewPanel';
 
 
 const CONFIDENCE_CONFIG = {
@@ -15,7 +16,7 @@ const CONFIDENCE_CONFIG = {
 };
 
 
-const TABS = ['AI Review', 'RAG Review', 'Evidence', 'Agent'];
+const TABS = ['AI Review', 'RAG Review', 'Evidence', 'Agent', 'HITL'];
 
 export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) {
   const [activeTab,       setActiveTab]       = useState('AI Review');
@@ -368,6 +369,11 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
               />
             )}
           </>
+        )}
+
+        {/* Human-in-the-Loop Agent Review (S5) */}
+        {activeTab === 'HITL' && (
+          <HitlReviewPanel ticketId={ticket?.id} />
         )}
 
       </div>

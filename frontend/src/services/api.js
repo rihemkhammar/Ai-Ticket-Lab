@@ -240,6 +240,41 @@ export const getLatestAgentRun = async (ticketId) => {
   return response.status === 204 ? null : response.data;
 };
 
+// Human-in-the-Loop Agent Review 
+
+// POST /api/tickets/:id/agent/hitl-review — lance l'investigation agent et
+// s'arrête à un checkpoint de revue humaine (WAITING_FOR_HUMAN).
+// options: { userGoal?, topK?, includePreviousReviews? }
+export const runHitlReview = async (ticketId, options = {}) => {
+  const response = await api.post(`/api/tickets/${ticketId}/agent/hitl-review`, options);
+  return response.data;
+};
+
+// GET /api/tickets/:id/agent/hitl-review — dernier run HITL du ticket
+// (pending, finalisé ou rejeté), 204 si aucun — pour réafficher sans relancer.
+export const getLatestHitlReview = async (ticketId) => {
+  const response = await api.get(`/api/tickets/${ticketId}/agent/hitl-review`);
+  return response.status === 204 ? null : response.data;
+};
+
+// GET /api/tickets/:id/agent/hitl-review/:runId — recharge le dernier
+// checkpoint (pending ou finalisé) d'un run HITL sans relancer l'agent.
+export const getHitlReview = async (ticketId, runId) => {
+  const response = await api.get(`/api/tickets/${ticketId}/agent/hitl-review/${runId}`);
+  return response.status === 204 ? null : response.data;
+};
+
+// POST /api/agent-runs/:runId/human-review/decision — décision humaine
+// decision: "APPROVE" | "REJECT" | "REQUEST_REVISION"
+// comment: optionnel pour APPROVE, requis pour REJECT / REQUEST_REVISION
+export const submitHumanDecision = async (runId, decision, comment) => {
+  const response = await api.post(`/api/agent-runs/${runId}/human-review/decision`, {
+    decision,
+    comment,
+  });
+  return response.data;
+};
+
 
 
 export default api;

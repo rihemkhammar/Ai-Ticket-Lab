@@ -40,6 +40,23 @@ public class AgentRun {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    public AgentRun() {}
+
+    /** Copies all fields, including the generated id, so a status transition can be
+     * persisted as a distinct object rather than mutating an already-saved instance
+     * in place (keeps the RUNNING snapshot that was saved earlier genuinely intact). */
+    public AgentRun(AgentRun other) {
+        this.id = other.id;
+        this.ticketId = other.ticketId;
+        this.promptVersion = other.promptVersion;
+        this.modelName = other.modelName;
+        this.status = other.status;
+        this.resultJson = other.resultJson;
+        this.errorMessage = other.errorMessage;
+        this.createdAt = other.createdAt;
+        this.completedAt = other.completedAt;
+    }
+
     public Long getId()                          { return id; }
 
     public Long getTicketId()                    { return ticketId; }
