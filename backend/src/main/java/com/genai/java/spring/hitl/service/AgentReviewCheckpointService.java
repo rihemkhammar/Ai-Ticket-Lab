@@ -36,21 +36,21 @@ public class AgentReviewCheckpointService {
 
     /** Creates the first checkpoint (checkpointNumber = 1) of a new HITL run. */
     public CheckpointSnapshot createInitialCheckpoint(Long agentRunId, Long ticketId, String draftJson,
-                                                        String serializedPromptJson, String toolTraceSnapshotJson) {
+                                                      String serializedPromptJson, String toolTraceSnapshotJson) {
         return createCheckpoint(agentRunId, ticketId, 1, draftJson, serializedPromptJson, toolTraceSnapshotJson);
     }
 
     /** Creates a revised checkpoint after REQUEST_REVISION, incrementing the checkpoint number. */
     public CheckpointSnapshot createRevisedCheckpoint(Long agentRunId, Long ticketId, int nextCheckpointNumber,
-                                                        String draftJson, String serializedPromptJson,
-                                                        String toolTraceSnapshotJson) {
+                                                      String draftJson, String serializedPromptJson,
+                                                      String toolTraceSnapshotJson) {
         return createCheckpoint(agentRunId, ticketId, nextCheckpointNumber, draftJson,
                 serializedPromptJson, toolTraceSnapshotJson);
     }
 
     private CheckpointSnapshot createCheckpoint(Long agentRunId, Long ticketId, int checkpointNumber,
-                                                 String draftJson, String serializedPromptJson,
-                                                 String toolTraceSnapshotJson) {
+                                                String draftJson, String serializedPromptJson,
+                                                String toolTraceSnapshotJson) {
         AgentReviewCheckpoint checkpoint = new AgentReviewCheckpoint();
         checkpoint.setAgentRunId(agentRunId);
         checkpoint.setTicketId(ticketId);
@@ -72,6 +72,17 @@ public class AgentReviewCheckpointService {
 
     public Optional<CheckpointSnapshot> findLatestCheckpoint(Long agentRunId) {
         return repository.findFirstByAgentRunIdOrderByCheckpointNumberDesc(agentRunId)
+                .map(CheckpointSnapshot::from);
+    }
+
+    /**
+     * Latest checkpoint for a ticket across all of its agent_runs (ordered by
+     * checkpoint creation time), used to reload the HITL review on page
+     * refresh without depending on the ticket's latest agent_run actually
+     * being a HITL run (S5-G03).
+     */
+    public Optional<CheckpointSnapshot> findLatestCheckpointForTicket(Long ticketId) {
+        return repository.findFirstByTicketIdOrderByCreatedAtDesc(ticketId)
                 .map(CheckpointSnapshot::from);
     }
 

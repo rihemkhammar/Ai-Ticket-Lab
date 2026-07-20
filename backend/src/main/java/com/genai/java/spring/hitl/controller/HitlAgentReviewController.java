@@ -1,5 +1,6 @@
 package com.genai.java.spring.hitl.controller;
 
+import com.genai.java.spring.agent.AgentRunStatus;
 import com.genai.java.spring.hitl.dto.HitlReviewRequest;
 import com.genai.java.spring.hitl.dto.HitlReviewResponse;
 import com.genai.java.spring.hitl.service.HitlAgentReviewService;
@@ -26,9 +27,15 @@ public class HitlAgentReviewController {
 
     @PostMapping("/hitl-review")
     public ResponseEntity<HitlReviewResponse> runHitlReview(@PathVariable Long ticketId,
-                                                              @RequestBody(required = false) HitlReviewRequest request) {
+                                                            @RequestBody(required = false) HitlReviewRequest request) {
         HitlReviewRequest effectiveRequest = request != null ? request : new HitlReviewRequest();
         HitlReviewResponse response = hitlAgentReviewService.startReview(ticketId, effectiveRequest);
+
+        // A FAILED HITL attempt never created a pending human checkpoint — returning
+        // 201 CREATED in that case would be misleading to callers/frontend (S5-G04).
+        if (response.getStatus() == AgentRunStatus.FAILED) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

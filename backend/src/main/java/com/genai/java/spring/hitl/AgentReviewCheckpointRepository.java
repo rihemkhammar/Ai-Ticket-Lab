@@ -12,4 +12,11 @@ public interface AgentReviewCheckpointRepository extends JpaRepository<AgentRevi
     Optional<AgentReviewCheckpoint> findFirstByAgentRunIdOrderByCheckpointNumberDesc(Long agentRunId);
 
     Optional<AgentReviewCheckpoint> findFirstByAgentRunIdAndStatus(Long agentRunId, ReviewCheckpointStatus status);
+
+    /**
+     * Latest checkpoint for a ticket, regardless of which agent_run it belongs to.
+     * Used to reload the HITL review after a refresh even when a newer, non-HITL
+     * agent_run has since been created for the same ticket (S5-G03).
+     */
+    Optional<AgentReviewCheckpoint> findFirstByTicketIdOrderByCreatedAtDesc(Long ticketId);
 }

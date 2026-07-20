@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react';
 
-import { TbRefresh, TbCircleCheck, TbBrain, TbX, TbRobot, TbSearch, TbAlertTriangle, TbCheck,TbPin, TbListCheck, TbTool } from 'react-icons/tb';
+import { TbRefresh, TbCircleCheck, TbX } from 'react-icons/tb';
 import { STATUS_CONFIG } from './Ticketconstants';
 import {
   updateTicketStatus, runAiReview, runRagReview, getTicketEvidence, runAgentInvestigation,
   getLatestAiReview, getLatestRagReview, getLatestAgentRun,
+  getLatestHitlReview, runHitlReview, submitHumanDecision,
 } from '../../services/api';
-import HitlReviewPanel from './hitl/HitlReviewPanel';
 
-
-const CONFIDENCE_CONFIG = {
-  LOW:    { label: 'Low',    color: '#f87171' },
-  MEDIUM: { label: 'Medium', color: '#facc15' },
-  HIGH:   { label: 'High',   color: '#4ade80' },
-};
-
+import { AiReviewPanel, AiReviewModalContent } from './reviews/AiReviewTab';
+import { RagReviewPanel, RagReviewModalContent } from './reviews/RagReviewTab';
+import { EvidencePanel, EvidenceModalContent } from './reviews/EvidenceTab';
+import { AgentPanel, AgentModalContent } from './reviews/AgentTab';
+import { HitlPanel } from './hitl/HitlPanel';
+import { HitlModalContent } from './hitl/Hitlmodalcontent';
 
 const TABS = ['AI Review', 'RAG Review', 'Evidence', 'Agent', 'HITL'];
 
@@ -38,7 +37,12 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
   const [agentLoading,    setAgentLoading]    = useState(false);
   const [agentError,      setAgentError]      = useState(null);
 
-  //on ticket change, reload any previously-stored results from
+  const [hitlResult,      setHitlResult]      = useState(null);
+  const [hitlLoading,     setHitlLoading]     = useState(false);
+  const [hitlError,       setHitlError]       = useState(null);
+  const [hitlDeciding,    setHitlDeciding]     = useState(null); // 'APPROVE'|'REJECT'|'REQUEST_REVISION'|null
+
+  // On ticket change, reload any previously-stored results from
   // the backend instead of just wiping them to null. Evidence is cheap to
   // recompute live and isn't persisted, so it stays reset until the user
   // clicks "Get Evidence" again.
@@ -49,6 +53,8 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
     setRagError(null);      setRagLoading(false);
     setEvidenceResult(null);setEvidenceError(null);setEvidenceLoading(false);
     setAgentError(null);    setAgentLoading(false);
+    setHitlResult(null);
+    setHitlError(null);     setHitlLoading(false); setHitlDeciding(null);
     setModalOpen(false);
     setActiveTab('AI Review');
 
@@ -63,11 +69,13 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
       getLatestAiReview(ticket.id),
       getLatestRagReview(ticket.id),
       getLatestAgentRun(ticket.id),
-    ]).then(([ai, rag, agent]) => {
+      getLatestHitlReview(ticket.id),
+    ]).then(([ai, rag, agent, hitl]) => {
       if (cancelled) return;
       if (ai.status === 'fulfilled' && ai.value) setAiResult(ai.value);
       if (rag.status === 'fulfilled' && rag.value) setRagResult(rag.value);
       if (agent.status === 'fulfilled' && agent.value) setAgentResult(agent.value);
+      if (hitl.status === 'fulfilled' && hitl.value) setHitlResult(hitl.value);
     });
 
     return () => { cancelled = true; };
@@ -120,7 +128,6 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
     } finally { setEvidenceLoading(false); }
   };
 
-
   const handleAgentInvestigation = async () => {
     setAgentLoading(true); setAgentError(null); setAgentResult(null);
     try {
@@ -141,19 +148,44 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
     } finally { setAgentLoading(false); }
   };
 
+  const handleRunHitl = async () => {
+    setHitlLoading(true); setHitlError(null);
+    try {
+      const data = await runHitlReview(ticket.id);
+      setHitlResult(data);
+      setModalOpen(true);
+      if (data?.status === 'FAILED') {
+        setHitlError(data.errorMessage ?? "The HITL agent failed.");
+      }
+    } catch (err) {
+      setHitlError(err.response?.data?.message ?? "Could not start the HITL review.");
+    } finally { setHitlLoading(false); }
+  };
+
+  const handleHitlDecide = async (decision, comment) => {
+    if (!hitlResult?.runId) return;
+    setHitlDeciding(decision); setHitlError(null);
+    try {
+      const decisionResponse = await submitHumanDecision(hitlResult.runId, decision, comment);
+      if (decision === 'REQUEST_REVISION' && decisionResponse.revisedReview) {
+        setHitlResult(decisionResponse.revisedReview);
+      } else {
+        // APPROVE / REJECT -> reload the authoritative persisted state
+        const reloaded = await getLatestHitlReview(ticket.id);
+        setHitlResult(reloaded);
+      }
+    } catch (err) {
+      setHitlError(err.response?.data?.message ?? 'The human decision failed.');
+    } finally { setHitlDeciding(null); }
+  };
 
   const hasResult = {
     'AI Review':  !!aiResult || !!aiError,
     'RAG Review': !!ragResult || !!ragError,
     'Evidence':   !!evidenceResult || !!evidenceError,
     'Agent':      !!agentResult || !!agentError,
-
+    'HITL':       !!hitlResult,
   };
-
-    
- 
-  const anyLoading = aiLoading || ragLoading || evidenceLoading || agentLoading;
-
 
   return (
     <>
@@ -262,118 +294,55 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
           ))}
         </div>
 
-        {/* Bouton AI Review */}
         {activeTab === 'AI Review' && (
-          <>
-            <button onClick={handleAiReview} disabled={aiLoading} style={{
-              width: '100%', padding: '13px',
-              background: aiLoading ? 'rgba(139,92,246,0.1)' : 'rgba(139,92,246,0.15)',
-              border: '1px solid rgba(139,92,246,0.3)', borderRadius: '12px',
-              color: '#a78bfa', fontSize: '14px', fontWeight: 600,
-              cursor: aiLoading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            }}>
-              {aiLoading ? <Spinner color="#a78bfa" /> : <TbBrain size={16} />}
-              {aiLoading ? 'Running AI Review...' : 'Run AI Review'}
-            </button>
-            {aiError && <ErrorBox>{aiError}</ErrorBox>}
-            {aiResult && (
-              <ResultPreview
-                color="#a78bfa"
-                label={`AI Review — ${aiResult.status}`}
-                confidence={aiResult.result?.confidence}
-                confConfig={CONFIDENCE_CONFIG}
-                onOpen={() => setModalOpen(true)}
-              />
-            )}
-          </>
+          <AiReviewPanel
+            aiLoading={aiLoading}
+            aiError={aiError}
+            aiResult={aiResult}
+            onRun={handleAiReview}
+            onOpen={() => setModalOpen(true)}
+          />
         )}
 
-        {/* Bouton RAG Review */}
         {activeTab === 'RAG Review' && (
-          <>
-            <button onClick={handleRagReview} disabled={ragLoading} style={{
-              width: '100%', padding: '13px',
-              background: ragLoading ? 'rgba(167,139,250,0.05)' : 'rgba(167,139,250,0.12)',
-              border: '1px solid rgba(167,139,250,0.35)', borderRadius: '12px',
-              color: '#c4b5fd', fontSize: '14px', fontWeight: 600,
-              cursor: ragLoading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            }}>
-              {ragLoading ? <Spinner color="#c4b5fd" /> : <TbRobot size={16} />}
-              {ragLoading ? 'Running RAG Review...' : 'Run RAG Review'}
-            </button>
-            {ragError && <ErrorBox>{ragError}</ErrorBox>}
-            {ragResult && (
-              <ResultPreview
-                color="#c4b5fd"
-                label={`RAG Review — ${ragResult.status}`}
-                confidence={ragResult.result?.confidence}
-                confConfig={CONFIDENCE_CONFIG}
-                needsHuman={ragResult.result?.needsHumanReview}
-                onOpen={() => setModalOpen(true)}
-              />
-            )}
-          </>
+          <RagReviewPanel
+            ragLoading={ragLoading}
+            ragError={ragError}
+            ragResult={ragResult}
+            onRun={handleRagReview}
+            onOpen={() => setModalOpen(true)}
+          />
         )}
 
-        {/* Bouton Evidence */}
         {activeTab === 'Evidence' && (
-          <>
-            <button onClick={handleEvidence} disabled={evidenceLoading} style={{
-              width: '100%', padding: '13px',
-              background: evidenceLoading ? 'rgba(96,165,250,0.05)' : 'rgba(96,165,250,0.10)',
-              border: '1px solid rgba(96,165,250,0.3)', borderRadius: '12px',
-              color: '#60a5fa', fontSize: '14px', fontWeight: 600,
-              cursor: evidenceLoading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            }}>
-              {evidenceLoading ? <Spinner color="#60a5fa" /> : <TbSearch size={16} />}
-              {evidenceLoading ? 'Fetching Evidence...' : 'Get Evidence'}
-            </button>
-            {evidenceError && <ErrorBox>{evidenceError}</ErrorBox>}
-            {evidenceResult && (
-              <ResultPreview
-                color="#60a5fa"
-                label={`Evidence — ${evidenceResult.evidence?.length ?? 0} chunks`}
-                onOpen={() => setModalOpen(true)}
-              />
-            )}
-          </>
+          <EvidencePanel
+            evidenceLoading={evidenceLoading}
+            evidenceError={evidenceError}
+            evidenceResult={evidenceResult}
+            onRun={handleEvidence}
+            onOpen={() => setModalOpen(true)}
+          />
         )}
 
-
-        {/* Bouton Agent Assistant */}
         {activeTab === 'Agent' && (
-          <>
-            <button onClick={handleAgentInvestigation} disabled={agentLoading} style={{
-              width: '100%', padding: '13px',
-              background: agentLoading ? 'rgba(250,204,21,0.05)' : 'rgba(250,204,21,0.10)',
-              border: '1px solid rgba(250,204,21,0.3)', borderRadius: '12px',
-              color: '#facc15', fontSize: '14px', fontWeight: 600,
-              cursor: agentLoading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            }}>
-              {agentLoading ? <Spinner color="#facc15" /> : <TbTool size={16} />}
-              {agentLoading ? "Agent en cours d'investigation..." : 'Run Agent Assistant'}
-            </button>
-            {agentError && <ErrorBox>{agentError}</ErrorBox>}
-            {agentResult && (
-              <ResultPreview
-                color="#facc15"
-                label={`Agent — ${agentResult.status}`}
-                confidence={agentResult.confidence}
-                confConfig={CONFIDENCE_CONFIG}
-                needsHuman={agentResult.needsHumanReview}
-                onOpen={() => setModalOpen(true)}
-              />
-            )}
-          </>
+          <AgentPanel
+            agentLoading={agentLoading}
+            agentError={agentError}
+            agentResult={agentResult}
+            onRun={handleAgentInvestigation}
+            onOpen={() => setModalOpen(true)}
+          />
         )}
 
         {/* Human-in-the-Loop Agent Review (S5) */}
         {activeTab === 'HITL' && (
-          <HitlReviewPanel ticketId={ticket?.id} />
+          <HitlPanel
+            hitlLoading={hitlLoading}
+            hitlError={hitlError}
+            hitlResult={hitlResult}
+            onRun={handleRunHitl}
+            onOpen={() => setModalOpen(true)}
+          />
         )}
 
       </div>
@@ -435,344 +404,18 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
 
             {/* Modal body — scrollable */}
             <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
-
-              {/* Contenu AI Review */}
-              {activeTab === 'AI Review' && aiResult?.result && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#a78bfa', letterSpacing: '0.5px', marginBottom: '16px' }}>
-                    <TbBrain size={14} /> AI REVIEW — {aiResult.status}
-                  </div>
-                  <Section title="Summary">
-                    <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{aiResult.result.summary}</p>
-                  </Section>
-                  <Section title="Possible Causes">
-                    <ul style={{ margin: 0, paddingLeft: '18px' }}>
-                      {aiResult.result.possibleCauses?.map((c, i) => (
-                        <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{c}</li>
-                      ))}
-                    </ul>
-                  </Section>
-                  <Section title="Recommended Checks">
-                    <ul style={{ margin: 0, paddingLeft: '18px' }}>
-                      {aiResult.result.recommendedChecks?.map((c, i) => (
-                        <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{c}</li>
-                      ))}
-                    </ul>
-                  </Section>
-                  <Section title="Draft Response">
-                    <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{aiResult.result.draftResponse}</p>
-                  </Section>
-                  {aiResult.result.limitations?.length > 0 && (
-                    <Section title="Limitations">
-                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
-                        {aiResult.result.limitations.map((l, i) => (
-                          <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{l}</li>
-                        ))}
-                      </ul>
-                    </Section>
-                  )}
-                  {aiResult.result.needsHumanReview && (
-                    <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(250,204,21,0.1)', border: '1px solid rgba(250,204,21,0.3)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <TbAlertTriangle size={14} color="#facc15" />
-                      <span style={{ fontSize: '13px', color: '#facc15' }}>AI output is advisory. Human review is required before taking action.</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '10px 14px', background: 'rgba(77,124,199,0.05)', borderRadius: '10px' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Confidence</span>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: CONFIDENCE_CONFIG[aiResult.result.confidence]?.color ?? '#a78bfa' }}>
-                      {CONFIDENCE_CONFIG[aiResult.result.confidence]?.label ?? aiResult.result.confidence}
-                    </span>
-                  </div>
-                </>
+              {activeTab === 'AI Review'  && <AiReviewModalContent  aiResult={aiResult} />}
+              {activeTab === 'RAG Review' && <RagReviewModalContent ragResult={ragResult} />}
+              {activeTab === 'Evidence'   && <EvidenceModalContent  evidenceResult={evidenceResult} />}
+              {activeTab === 'Agent'      && <AgentModalContent     agentResult={agentResult} />}
+              {activeTab === 'HITL'       && (
+                <HitlModalContent
+                  review={hitlResult}
+                  error={hitlError}
+                  deciding={hitlDeciding}
+                  onDecide={handleHitlDecide}
+                />
               )}
-
-              {/* Contenu RAG Review */}
-              {activeTab === 'RAG Review' && ragResult && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#c4b5fd', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                    <TbRobot size={14} /> RAG REVIEW — {ragResult.status}
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                    {ragResult.result?.confidence && (
-                      <span style={{
-                        fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px',
-                        color: CONFIDENCE_CONFIG[ragResult.result.confidence]?.color ?? '#a78bfa',
-                        background: `${CONFIDENCE_CONFIG[ragResult.result.confidence]?.color ?? '#a78bfa'}18`,
-                        border: `1px solid ${CONFIDENCE_CONFIG[ragResult.result.confidence]?.color ?? '#a78bfa'}33`,
-                      }}>
-                        {ragResult.result.confidence}
-                      </span>
-                    )}
-                    {ragResult.result?.needsHumanReview && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px', color: '#f87171', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)' }}>
-                        <TbAlertTriangle size={11} /> Revue humaine
-                      </span>
-                    )}
-                  </div>
-                  {(ragResult.modelName || ragResult.promptVersion) && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '16px', display: 'flex', gap: '10px' }}>
-                      {ragResult.modelName     && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><TbRobot size={12} /> {ragResult.modelName}</span>}
-                      {ragResult.promptVersion && (
-  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-    <TbPin size={12} /> {ragResult.promptVersion}
-  </span>
-)}
-                    </div>
-                  )}
-                  {ragResult.result?.summary && (
-                    <Section title="Résumé">
-                      <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{ragResult.result.summary}</p>
-                    </Section>
-                  )}
-
-
-                  {/* possibleCauses */}
-
-                  {ragResult.result?.possibleCauses?.length > 0 && (
-                    <Section title="Causes possibles">
-                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
-                        {ragResult.result.possibleCauses.map((c, i) => (
-                          <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{c}</li>
-                        ))}
-                      </ul>
-                    </Section>
-                  )}
-
-
-                  {/*  recommendedChecks */}
-                  {ragResult.result?.recommendedChecks?.length > 0 && (
-                    <Section title="Vérifications recommandées">
-                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
-                        {ragResult.result.recommendedChecks.map((c, i) => (
-                          <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{c}</li>
-                        ))}
-                      </ul>
-                    </Section>
-                  )}
-
-
-                  {/*  draftResponse */}
-
-                  {ragResult.result?.draftResponse && (
-                    <Section title="Réponse suggérée">
-                      <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{ragResult.result.draftResponse}</p>
-                    </Section>
-                  )}
-
-
-                  {/*  evidenceRefs — sources citées par le modèle */}
-
-                  {ragResult.result?.evidenceRefs?.length > 0 && (
-                    <Section title="Sources citées">
-                      {ragResult.result.evidenceRefs.map((ref, i) => (
-                        <div key={i} style={{
-                          display: 'flex', alignItems: 'flex-start', gap: '8px',
-                          padding: '8px 12px', borderRadius: '10px', marginBottom: '6px',
-                          background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.2)',
-                        }}>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#a78bfa', marginTop: '1px', flexShrink: 0 }}>#{i + 1}</span>
-                          <div>
-                            {ref.articleTitle && (
-                              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '2px' }}>{ref.articleTitle}</div>
-                            )}
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{ref.sourceRef}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </Section>
-                  )}
-
-
-                  {/* limitations */}
-
-                  {ragResult.result?.limitations?.length > 0 && (
-                    <Section title="Limitations">
-                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
-                        {ragResult.result.limitations.map((l, i) => (
-                          <li key={i} style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>{l}</li>
-                        ))}
-                      </ul>
-                    </Section>
-                  )}
-
-
-                  {/* retrieved chunks — aperçu optionnel uniquement */}
-                  {ragResult.retrievedEvidence?.length > 0 && (
-                    <div style={{ marginTop: '16px' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' }}>
-                        Chunks récupérés ({ragResult.retrievedEvidence.length})
-                      </div>
-                      {ragResult.retrievedEvidence.map((e, i) => (
-                        <div key={i} style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '8px 12px', borderLeft: '2px solid rgba(167,139,250,0.4)', marginBottom: '8px', lineHeight: 1.6 }}>
-                          {e.articleTitle && <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '2px' }}>{e.articleTitle}</strong>}
-                          {e.content ?? e.text ?? ''}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Contenu Evidence */}
-              {activeTab === 'Evidence' && evidenceResult && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#60a5fa', letterSpacing: '0.5px', marginBottom: '16px' }}>
-                    <TbSearch size={14} /> EVIDENCE — {evidenceResult.evidence?.length ?? 0} chunks
-                  </div>
-                  {(evidenceResult.evidence ?? []).length === 0 ? (
-                    <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Aucun chunk trouvé.</p>
-                  ) : (
-                    (evidenceResult.evidence ?? []).map((chunk, i) => (
-                      <div key={i} style={{
-                        marginBottom: '12px', padding: '12px 14px', borderRadius: '12px',
-                        background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)',
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '11px', fontWeight: 600, color: '#60a5fa' }}>Chunk #{i + 1}</span>
-                          {chunk.score !== undefined && (
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                              score: {typeof chunk.score === 'number' ? chunk.score.toFixed(4) : chunk.score}
-                            </span>
-                          )}
-                        </div>
-                        {chunk.articleTitle && (
-                          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>{chunk.articleTitle}</div>
-                        )}
-                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-                          {chunk.content ?? chunk.text ?? JSON.stringify(chunk)}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </>
-              )}
-
-
-              {/* Contenu Agent Assistant */}
-              {activeTab === 'Agent' && agentResult && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#facc15', letterSpacing: '0.5px', marginBottom: '12px' }}>
-                    <TbTool size={14} /> AGENT INVESTIGATION — {agentResult.status}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                    {agentResult.confidence && (
-                      <span style={{
-                        fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px',
-                        color: CONFIDENCE_CONFIG[agentResult.confidence]?.color ?? '#facc15',
-                        background: `${CONFIDENCE_CONFIG[agentResult.confidence]?.color ?? '#facc15'}18`,
-                        border: `1px solid ${CONFIDENCE_CONFIG[agentResult.confidence]?.color ?? '#facc15'}33`,
-                      }}>
-                        {agentResult.confidence}
-                      </span>
-                    )}
-                    {agentResult.needsHumanReview && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px', color: '#f87171', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)' }}>
-                        <TbAlertTriangle size={11} /> Revue humaine
-                      </span>
-                    )}
-                  </div>
-
-                  {(agentResult.modelName || agentResult.promptVersion) && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '16px', display: 'flex', gap: '10px' }}>
-                      {agentResult.modelName     && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><TbRobot size={12} /> {agentResult.modelName}</span>}
-                      {agentResult.promptVersion && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><TbPin size={12} /> {agentResult.promptVersion}</span>}
-                    </div>
-                  )}
-
-                  {/* Tool-call trace — operational only, never chain-of-thought */}
-                  {agentResult.toolCalls?.length > 0 && (
-                    <Section title="Tool-call trace">
-                      {agentResult.toolCalls.map((tc, i) => (
-                        <div key={i} style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '8px 12px', borderRadius: '10px', marginBottom: '6px',
-                          background: tc.status === 'SUCCESS' ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)',
-                          border: `1px solid ${tc.status === 'SUCCESS' ? 'rgba(74,222,128,0.25)' : 'rgba(248,113,113,0.25)'}`,
-                        }}>
-                          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', fontFamily: 'monospace' }}>{tc.toolName}</span>
-                          <span style={{
-                            fontSize: '11px', fontWeight: 700,
-                            color: tc.status === 'SUCCESS' ? '#4ade80' : '#f87171',
-                          }}>
-                            {tc.status}
-                          </span>
-                        </div>
-                      ))}
-                    </Section>
-                  )}
-
-                  {agentResult.status === 'FAILED' && agentResult.errorMessage && (
-                    <ErrorBox>{agentResult.errorMessage}</ErrorBox>
-                  )}
-
-                  {agentResult.investigationSummary && (
-                    <Section title="Investigation Summary">
-                      <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{agentResult.investigationSummary}</p>
-                    </Section>
-                  )}
-
-                  {agentResult.previousReviewSummary && (
-                    <Section title="Previous Review Summary">
-                      <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>{agentResult.previousReviewSummary}</p>
-                    </Section>
-                  )}
-
-                  {agentResult.recommendedNextSteps?.length > 0 && (
-                    <Section title="Recommended Next Steps">
-                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
-                        {agentResult.recommendedNextSteps.map((c, i) => (
-                          <li key={i} style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7 }}>{c}</li>
-                        ))}
-                      </ul>
-                    </Section>
-                  )}
-
-                  {agentResult.draftTechnicianResponse && (
-                    <Section title="Draft Technician Response">
-                      <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{agentResult.draftTechnicianResponse}</p>
-                    </Section>
-                  )}
-
-                  {agentResult.evidenceRefs?.length > 0 && (
-                    <Section title="Evidence References">
-                      {agentResult.evidenceRefs.map((ref, i) => (
-                        <div key={i} style={{
-                          display: 'flex', alignItems: 'flex-start', gap: '8px',
-                          padding: '8px 12px', borderRadius: '10px', marginBottom: '6px',
-                          background: 'rgba(250,204,21,0.06)', border: '1px solid rgba(250,204,21,0.2)',
-                        }}>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#facc15', marginTop: '1px', flexShrink: 0 }}>#{i + 1}</span>
-                          <div>
-                            {ref.articleTitle && (
-                              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '2px' }}>{ref.articleTitle}</div>
-                            )}
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{ref.sourceRef}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </Section>
-                  )}
-
-                  {agentResult.limitations?.length > 0 && (
-                    <Section title="Limitations">
-                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
-                        {agentResult.limitations.map((l, i) => (
-                          <li key={i} style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>{l}</li>
-                        ))}
-                      </ul>
-                    </Section>
-                  )}
-
-                  {agentResult.needsHumanReview && (
-                    <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(250,204,21,0.1)', border: '1px solid rgba(250,204,21,0.3)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <TbAlertTriangle size={14} color="#facc15" />
-                      <span style={{ fontSize: '13px', color: '#facc15' }}>AI output is advisory. Human review is required before taking action.</span>
-                    </div>
-                  )}
-                </>
-              )}
-
             </div>
           </div>
         </div>
@@ -780,72 +423,5 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
-  );
-}
-
-/* ── Sub-components ── */
-
-function ResultPreview({ color, label, confidence, confConfig, needsHuman, onOpen }) {
-  return (
-    <div style={{
-      marginTop: '12px', padding: '12px 14px', borderRadius: '12px',
-      background: `${color}08`, border: `1px solid ${color}22`,
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 600, color }}>
-          <TbCheck size={13} /> {label}
-        </span>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {confidence && (
-            <span style={{ fontSize: '11px', color: confConfig[confidence]?.color ?? color }}>
-              {confConfig[confidence]?.label ?? confidence}
-            </span>
-          )}
-          {needsHuman && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px', color: '#f87171' }}>
-              <TbAlertTriangle size={11} /> Revue humaine
-            </span>
-          )}
-        </div>
-      </div>
-      <button onClick={onOpen} style={{
-        fontSize: '12px', fontWeight: 600, padding: '5px 12px',
-        borderRadius: '8px', border: `1px solid ${color}44`,
-        background: `${color}14`, color, cursor: 'pointer',
-      }}>
-        Voir →
-      </button>
-    </div>
-  );
-}
-
-function Spinner({ color }) {
-  return (
-    <span style={{
-      width: '14px', height: '14px', border: `2px solid ${color}`,
-      borderTopColor: 'transparent', borderRadius: '50%',
-      display: 'inline-block', animation: 'spin 0.8s linear infinite',
-    }} />
-  );
-}
-
-function ErrorBox({ children }) {
-  return (
-    <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <TbAlertTriangle size={14} color="#f87171" />
-      <span style={{ fontSize: '13px', color: '#f87171' }}>{children}</span>
-    </div>
-  );
-}
-
-function Section({ title, children }) {
-  return (
-    <div style={{ marginBottom: '16px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.5px', marginBottom: '6px', textTransform: 'uppercase' }}>
-        {title}
-      </div>
-      {children}
-    </div>
   );
 }

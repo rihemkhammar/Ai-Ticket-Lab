@@ -217,9 +217,12 @@ public class HitlAgentReviewService {
      * was a plain M4 investigation run).
      */
     public Optional<HitlReviewResponse> getLatestReview(Long ticketId) {
-        return agentRunRepository.findFirstByTicketIdOrderByCreatedAtDesc(ticketId)
-                .flatMap(run -> checkpointService.findLatestCheckpoint(run.getId())
-                        .map(checkpoint -> toPendingResponse(run, checkpoint, readDraft(checkpoint.getDraftJson()), List.of())));
+        // Look up the latest HITL checkpoint directly by ticketId first, instead of
+        // starting from the ticket's latest agent_run: if a newer non-HITL run has
+        // been created since, the HITL checkpoint must still be resolvable (S5-G03).
+        return checkpointService.findLatestCheckpointForTicket(ticketId)
+                .flatMap(checkpoint -> agentRunRepository.findById(checkpoint.getAgentRunId())
+                        .map(run -> toPendingResponse(run, checkpoint, readDraft(checkpoint.getDraftJson()), List.of())));
     }
 
     private HitlReviewResponse toPendingResponse(AgentRun run, CheckpointSnapshot checkpoint, HitlDraft draft,
@@ -245,6 +248,9 @@ public class HitlAgentReviewService {
         }
         response.setHumanDecision(checkpoint.getHumanDecision());
         response.setHumanComment(checkpoint.getHumanComment());
+        // Real human-decision completion time (finalized/rejected/superseded), distinct
+        // from the checkpoint's creation time — null while still PENDING (S5-G05).
+        response.setFinalizedAt(checkpoint.getCompletedAt());
         if (checkpoint.getFinalReviewedResultJson() != null) {
             response.setFinalReviewedResult(readFinalResult(checkpoint.getFinalReviewedResultJson()));
         }

@@ -41,6 +41,7 @@ public class HitlReviewResponse {
 
     private String errorMessage;
     private LocalDateTime createdAt;
+    private LocalDateTime finalizedAt;
 
     public Long getRunId()                                   { return runId; }
     public void setRunId(Long v)                             { this.runId = v; }
@@ -101,4 +102,7 @@ public class HitlReviewResponse {
 
     public LocalDateTime getCreatedAt()                        { return createdAt; }
     public void setCreatedAt(LocalDateTime v)                  { this.createdAt = v; }
+
+    public LocalDateTime getFinalizedAt()                      { return finalizedAt; }
+    public void setFinalizedAt(LocalDateTime v)                { this.finalizedAt = v; }
 }

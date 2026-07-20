@@ -36,9 +36,9 @@ public class HumanReviewDecisionService {
     private final ObjectMapper objectMapper;
 
     public HumanReviewDecisionService(AgentRunRepository agentRunRepository,
-                                       AgentReviewCheckpointService checkpointService,
-                                       HitlRevisionService revisionService,
-                                       ObjectMapper objectMapper) {
+                                      AgentReviewCheckpointService checkpointService,
+                                      HitlRevisionService revisionService,
+                                      ObjectMapper objectMapper) {
         this.agentRunRepository = agentRunRepository;
         this.checkpointService = checkpointService;
         this.revisionService = revisionService;
@@ -138,6 +138,11 @@ public class HumanReviewDecisionService {
         run.setStatus(AgentRunStatus.REVISING);
         agentRunRepository.save(run);
 
+        // Persist the human REQUEST_REVISION decision + comment FIRST, before attempting
+        // GPT revision generation. This guarantees the human decision and checkpoint
+        // history survive even if the revised draft generation fails below (S5-G02).
+        checkpointService.supersedeCheckpoint(pending.getCheckpointId(), comment);
+
         HitlDraft revisedDraft;
         try {
             revisedDraft = revisionService.generateRevisedDraft(
@@ -148,12 +153,11 @@ public class HumanReviewDecisionService {
             run.setErrorMessage(e.getMessage());
             run.setCompletedAt(LocalDateTime.now());
             agentRunRepository.save(run);
+            // The REQUEST_REVISION decision/comment is already persisted on the
+            // superseded checkpoint above — checkpoint history is preserved.
             throw new HitlValidationException(
                     "Revision could not be generated: " + e.getMessage());
         }
-
-        // Mark the old checkpoint SUPERSEDED (stores the REQUEST_REVISION decision + comment)
-        checkpointService.supersedeCheckpoint(pending.getCheckpointId(), comment);
 
         int nextCheckpointNumber = pending.getCheckpointNumber() + 1;
         CheckpointSnapshot revisedCheckpoint = checkpointService.createRevisedCheckpoint(
@@ -193,7 +197,7 @@ public class HumanReviewDecisionService {
     // ---- helpers --------------------------------------------------------------
 
     private HumanReviewDecisionResponse baseResponse(AgentRun run, Long checkpointId,
-                                                       HumanReviewDecision decision, String comment) {
+                                                     HumanReviewDecision decision, String comment) {
         HumanReviewDecisionResponse response = new HumanReviewDecisionResponse();
         response.setRunId(run.getId());
         response.setTicketId(run.getTicketId());

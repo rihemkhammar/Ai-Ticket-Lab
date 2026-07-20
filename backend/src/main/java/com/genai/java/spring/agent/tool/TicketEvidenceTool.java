@@ -27,7 +27,7 @@ public class TicketEvidenceTool {
     }
 
     /**
-     * S4-G03: topK is now honored end-to-end — it is forwarded to
+     * topK is now honored end-to-end — it is forwarded to
      * TicketEvidenceRetriever#retrieve(ticket, topK), which overrides the
      * configured app.rag.top-k for this call (clamped to a safe range).
      */

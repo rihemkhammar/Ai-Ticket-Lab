@@ -17,4 +17,9 @@ export const FILTER_MAP = {
   'In Progress': 'IN_PROGRESS',
   'Closed':      'CLOSED',
 };
+ export const CONFIDENCE_CONFIG = {
+  LOW:    { label: 'Low',    color: '#f87171' },
+  MEDIUM: { label: 'Medium', color: '#facc15' },
+  HIGH:   { label: 'High',   color: '#4ade80' },
+};
  
