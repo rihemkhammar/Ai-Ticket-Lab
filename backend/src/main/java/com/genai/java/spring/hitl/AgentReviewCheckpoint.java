@@ -70,6 +70,10 @@ public class AgentReviewCheckpoint {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    //  observability / trace field
+    @Column(name = "trace_id")
+    private String traceId;
+
     public Long getId()                                            { return id; }
 
     public Long getAgentRunId()                                    { return agentRunId; }
@@ -110,4 +114,7 @@ public class AgentReviewCheckpoint {
 
     public LocalDateTime getCompletedAt()                          { return completedAt; }
     public void setCompletedAt(LocalDateTime v)                    { this.completedAt = v; }
+
+    public String getTraceId()                                     { return traceId; }
+    public void setTraceId(String v)                               { this.traceId = v; }
 }

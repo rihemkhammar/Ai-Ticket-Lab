@@ -15,6 +15,8 @@ import com.genai.java.spring.agent.tool.dto.PreviousAiReviewResult;
 import com.genai.java.spring.agent.tool.dto.RecommendationBoundaryResult;
 import com.genai.java.spring.agent.tool.dto.TicketEvidenceResult;
 import com.genai.java.spring.agent.tool.dto.TicketLookupResult;
+import com.genai.java.spring.observability.AiTraceIdGenerator;
+import com.genai.java.spring.observability.AiWorkflowLogger;
 import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
 import com.genai.java.spring.shared.advisor.PromptInjectionGuard;
 import com.genai.java.spring.ticket.Ticket;
@@ -26,6 +28,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,6 +50,9 @@ import java.util.stream.Collectors;
  *  8. Update agent_run SUCCESS/FAILED, persist tool-call trace
  *
  * The agent is strictly read-only: it never mutates the ticket.
+ *
+ *  every run generates a traceId (propagated to tool calls) and stores
+ * runType/durationMs for the AI trace/observability endpoint.
  */
 @Slf4j
 @Service
@@ -66,6 +72,8 @@ public class TicketAgentInvestigationService {
     private final AgentRunRepository agentRunRepository;
     private final AgentToolCallRepository agentToolCallRepository;
     private final ObjectMapper objectMapper;
+    private final AiTraceIdGenerator traceIdGenerator;
+    private final AiWorkflowLogger workflowLogger;
 
     public TicketAgentInvestigationService(@Qualifier("openAIChatClient") ChatClient chatClient,
                                            TicketService ticketService,
@@ -78,7 +86,9 @@ public class TicketAgentInvestigationService {
                                            AgentOutputValidator validator,
                                            AgentRunRepository agentRunRepository,
                                            AgentToolCallRepository agentToolCallRepository,
-                                           ObjectMapper objectMapper) {
+                                           ObjectMapper objectMapper,
+                                           AiTraceIdGenerator traceIdGenerator,
+                                           AiWorkflowLogger workflowLogger) {
         this.chatClient = chatClient;
         this.ticketService = ticketService;
         this.ticketLookupTool = ticketLookupTool;
@@ -91,6 +101,8 @@ public class TicketAgentInvestigationService {
         this.agentRunRepository = agentRunRepository;
         this.agentToolCallRepository = agentToolCallRepository;
         this.objectMapper = objectMapper;
+        this.traceIdGenerator = traceIdGenerator;
+        this.workflowLogger = workflowLogger;
     }
 
     public TicketAgentInvestigationResponse investigate(Long ticketId, TicketAgentInvestigationRequest request) {
@@ -105,12 +117,17 @@ public class TicketAgentInvestigationService {
         run.setModelName(MODEL_NAME);
         run.setStatus(AgentRunStatus.RUNNING);
         run.setCreatedAt(LocalDateTime.now());
+        run.setTraceId(traceIdGenerator.generate());
+        run.setRunType(AgentRunType.AGENT_INVESTIGATION);
         run = agentRunRepository.save(run);
+
+        workflowLogger.logEvent("AI_RUN_STARTED", run.getTraceId(), run.getId(), ticketId,
+                run.getRunType().name(), run.getStatus().name(), null);
 
         List<AgentToolCallTrace> traceForResponse = new ArrayList<>();
 
         try {
-            TicketLookupResult ticketResult = runTool(run.getId(), TicketLookupTool.NAME,
+            TicketLookupResult ticketResult = runTool(run.getId(), run.getTraceId(), TicketLookupTool.NAME,
                     ticketId, () -> ticketLookupTool.lookup(ticketId), traceForResponse);
 
             Ticket ticket = ticketService.findById(ticketId);
@@ -123,19 +140,19 @@ public class TicketAgentInvestigationService {
                         ticketId, injectionFlags);
             }
 
-            TicketEvidenceResult evidenceResult = runTool(run.getId(), TicketEvidenceTool.NAME,
+            TicketEvidenceResult evidenceResult = runTool(run.getId(), run.getTraceId(), TicketEvidenceTool.NAME,
                     ticketId, () -> ticketEvidenceTool.retrieve(ticket, request.getTopK()), traceForResponse);
             List<EvidenceChunkResponse> evidence = evidenceResult.getEvidence();
 
             PreviousAiReviewResult previousReviews;
             if (request.getIncludePreviousReviews()) {
-                previousReviews = runTool(run.getId(), PreviousAiReviewTool.NAME,
+                previousReviews = runTool(run.getId(), run.getTraceId(), PreviousAiReviewTool.NAME,
                         ticketId, () -> previousAiReviewTool.loadRecent(ticketId, 3), traceForResponse);
             } else {
                 previousReviews = PreviousAiReviewResult.of(ticketId, Collections.emptyList());
             }
 
-            RecommendationBoundaryResult boundaries = runTool(run.getId(),
+            RecommendationBoundaryResult boundaries = runTool(run.getId(), run.getTraceId(),
                     TicketRecommendationBoundaryTool.NAME, ticketId, boundaryTool::load, traceForResponse);
 
             String systemPrompt = promptBuilder.buildSystemPrompt();
@@ -232,36 +249,41 @@ public class TicketAgentInvestigationService {
         }
     }
 
-    private <T> T runTool(Long runId, String toolName, Long ticketId,
+    private <T> T runTool(Long runId, String traceId, String toolName, Long ticketId,
                           ToolCall<T> call, List<AgentToolCallTrace> traceForResponse) {
         LocalDateTime startedAt = LocalDateTime.now();
         try {
             T output = call.execute();
             LocalDateTime completedAt = LocalDateTime.now();
-            persistToolCall(runId, toolName, ticketId, output, AgentToolCallStatus.SUCCESS, null, startedAt);
+            persistToolCall(runId, traceId, toolName, ticketId, output, AgentToolCallStatus.SUCCESS, null,
+                    startedAt, completedAt);
             traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.SUCCESS.name(), null,
                     startedAt, completedAt));
             return output;
         } catch (AgentToolException e) {
             LocalDateTime completedAt = LocalDateTime.now();
-            persistToolCall(runId, toolName, ticketId, null, AgentToolCallStatus.FAILED, e.getMessage(), startedAt);
+            persistToolCall(runId, traceId, toolName, ticketId, null, AgentToolCallStatus.FAILED, e.getMessage(),
+                    startedAt, completedAt);
             traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.FAILED.name(), e.getMessage(),
                     startedAt, completedAt));
             throw e;
         }
     }
 
-    private void persistToolCall(Long runId, String toolName, Long ticketId, Object output,
-                                 AgentToolCallStatus status, String errorMessage, LocalDateTime startedAt) {
+    private void persistToolCall(Long runId, String traceId, String toolName, Long ticketId, Object output,
+                                 AgentToolCallStatus status, String errorMessage,
+                                 LocalDateTime startedAt, LocalDateTime completedAt) {
         AgentToolCall call = new AgentToolCall();
         call.setAgentRunId(runId);
+        call.setTraceId(traceId);
         call.setToolName(toolName);
         call.setInputJson(safeWrite(Collections.singletonMap("ticketId", ticketId)));
         call.setOutputJson(output != null ? safeWrite(output) : null);
         call.setStatus(status);
         call.setErrorMessage(errorMessage);
         call.setStartedAt(startedAt);
-        call.setCompletedAt(LocalDateTime.now());
+        call.setCompletedAt(completedAt);
+        call.setDurationMs(Duration.between(startedAt, completedAt).toMillis());
         agentToolCallRepository.save(call);
     }
 
@@ -279,7 +301,11 @@ public class TicketAgentInvestigationService {
         run.setStatus(AgentRunStatus.FAILED);
         run.setErrorMessage(errorMessage);
         run.setCompletedAt(LocalDateTime.now());
+        run.setDurationMs(Duration.between(run.getCreatedAt(), run.getCompletedAt()).toMillis());
         agentRunRepository.save(run);
+
+        workflowLogger.logError("AI_RUN_FAILED", run.getTraceId(), run.getId(), run.getTicketId(),
+                run.getRunType() != null ? run.getRunType().name() : null, errorMessage);
 
         TicketAgentInvestigationResponse response = new TicketAgentInvestigationResponse();
         response.setRunId(run.getId());
@@ -299,8 +325,12 @@ public class TicketAgentInvestigationService {
                                                           List<AgentToolCallTrace> traceForResponse) {
         run.setStatus(AgentRunStatus.SUCCESS);
         run.setCompletedAt(LocalDateTime.now());
+        run.setDurationMs(Duration.between(run.getCreatedAt(), run.getCompletedAt()).toMillis());
         run.setResultJson(safeWrite(synthesis));
         agentRunRepository.save(run);
+
+        workflowLogger.logEvent("AI_RUN_FINALIZED", run.getTraceId(), run.getId(), run.getTicketId(),
+                run.getRunType().name(), run.getStatus().name(), run.getDurationMs());
 
         TicketAgentInvestigationResponse response = new TicketAgentInvestigationResponse();
         response.setRunId(run.getId());

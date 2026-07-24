@@ -40,6 +40,17 @@ public class AgentRun {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    // observability / trace fields ──────────────────────────────
+    @Column(name = "trace_id")
+    private String traceId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "run_type")
+    private AgentRunType runType;
+
+    @Column(name = "duration_ms")
+    private Long durationMs;
+
     public AgentRun() {}
 
     /** Copies all fields, including the generated id, so a status transition can be
@@ -55,6 +66,9 @@ public class AgentRun {
         this.errorMessage = other.errorMessage;
         this.createdAt = other.createdAt;
         this.completedAt = other.completedAt;
+        this.traceId = other.traceId;
+        this.runType = other.runType;
+        this.durationMs = other.durationMs;
     }
 
     public Long getId()                          { return id; }
@@ -82,4 +96,13 @@ public class AgentRun {
 
     public LocalDateTime getCompletedAt()        { return completedAt; }
     public void setCompletedAt(LocalDateTime v)  { this.completedAt = v; }
+
+    public String getTraceId()                   { return traceId; }
+    public void setTraceId(String v)             { this.traceId = v; }
+
+    public AgentRunType getRunType()              { return runType; }
+    public void setRunType(AgentRunType v)        { this.runType = v; }
+
+    public Long getDurationMs()                   { return durationMs; }
+    public void setDurationMs(Long v)             { this.durationMs = v; }
 }

@@ -8,10 +8,12 @@ import com.genai.java.spring.hitl.HitlValidationException;
 import com.genai.java.spring.hitl.HumanReviewDecision;
 import com.genai.java.spring.hitl.ReviewCheckpointStatus;
 import com.genai.java.spring.hitl.dto.*;
+import com.genai.java.spring.observability.AiWorkflowLogger;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
@@ -22,6 +24,10 @@ import java.time.LocalDateTime;
  * request-revision, each enforcing its own comment and state-transition
  * rules. The ticket itself is never touched — see the mandatory
  * "no mutation" guardrail: TicketService is not even injected here.
+ *
+ *  computes durationMs on the agent_run when it reaches a terminal
+ * state, and emits structured HUMAN_DECISION_RECORDED / AI_RUN_FINALIZED /
+ * CHECKPOINT_CREATED trace events.
  */
 @Slf4j
 @Service
@@ -34,15 +40,18 @@ public class HumanReviewDecisionService {
     private final AgentReviewCheckpointService checkpointService;
     private final HitlRevisionService revisionService;
     private final ObjectMapper objectMapper;
+    private final AiWorkflowLogger workflowLogger;
 
     public HumanReviewDecisionService(AgentRunRepository agentRunRepository,
                                       AgentReviewCheckpointService checkpointService,
                                       HitlRevisionService revisionService,
-                                      ObjectMapper objectMapper) {
+                                      ObjectMapper objectMapper,
+                                      AiWorkflowLogger workflowLogger) {
         this.agentRunRepository = agentRunRepository;
         this.checkpointService = checkpointService;
         this.revisionService = revisionService;
         this.objectMapper = objectMapper;
+        this.workflowLogger = workflowLogger;
     }
 
     @Transactional
@@ -86,7 +95,7 @@ public class HumanReviewDecisionService {
         result.setLimitations(draft.getLimitations());
         result.setHumanReviewed(true);
         result.setHumanDecision(HumanReviewDecision.APPROVE);
-        // Mandatory safety invariants (S5 §2.4 / §2.6) — never true in this milestone.
+        // Mandatory safety invariants  — never true in this milestone.
         result.setOfficialActionExecuted(false);
         result.setTicketStatusChanged(false);
 
@@ -95,7 +104,13 @@ public class HumanReviewDecisionService {
 
         run.setStatus(AgentRunStatus.FINALIZED);
         run.setCompletedAt(LocalDateTime.now());
+        run.setDurationMs(Duration.between(run.getCreatedAt(), run.getCompletedAt()).toMillis());
         agentRunRepository.save(run);
+
+        workflowLogger.logEvent("HUMAN_DECISION_RECORDED", run.getTraceId(), run.getId(), run.getTicketId(),
+                run.getRunType() != null ? run.getRunType().name() : null, "APPROVE", null);
+        workflowLogger.logEvent("AI_RUN_FINALIZED", run.getTraceId(), run.getId(), run.getTicketId(),
+                run.getRunType() != null ? run.getRunType().name() : null, run.getStatus().name(), run.getDurationMs());
 
         HumanReviewDecisionResponse response = baseResponse(run, pending.getCheckpointId(),
                 HumanReviewDecision.APPROVE, comment);
@@ -115,7 +130,13 @@ public class HumanReviewDecisionService {
 
         run.setStatus(AgentRunStatus.REJECTED);
         run.setCompletedAt(LocalDateTime.now());
+        run.setDurationMs(Duration.between(run.getCreatedAt(), run.getCompletedAt()).toMillis());
         agentRunRepository.save(run);
+
+        workflowLogger.logEvent("HUMAN_DECISION_RECORDED", run.getTraceId(), run.getId(), run.getTicketId(),
+                run.getRunType() != null ? run.getRunType().name() : null, "REJECT", null);
+        workflowLogger.logEvent("AI_RUN_FINALIZED", run.getTraceId(), run.getId(), run.getTicketId(),
+                run.getRunType() != null ? run.getRunType().name() : null, run.getStatus().name(), run.getDurationMs());
 
         HumanReviewDecisionResponse response = baseResponse(run, pending.getCheckpointId(),
                 HumanReviewDecision.REJECT, comment);
@@ -140,8 +161,11 @@ public class HumanReviewDecisionService {
 
         // Persist the human REQUEST_REVISION decision + comment FIRST, before attempting
         // GPT revision generation. This guarantees the human decision and checkpoint
-        // history survive even if the revised draft generation fails below (S5-G02).
+        // history survive even if the revised draft generation fails below .
         checkpointService.supersedeCheckpoint(pending.getCheckpointId(), comment);
+
+        workflowLogger.logEvent("HUMAN_DECISION_RECORDED", run.getTraceId(), run.getId(), run.getTicketId(),
+                run.getRunType() != null ? run.getRunType().name() : null, "REQUEST_REVISION", null);
 
         HitlDraft revisedDraft;
         try {
@@ -152,7 +176,11 @@ public class HumanReviewDecisionService {
             run.setStatus(AgentRunStatus.FAILED);
             run.setErrorMessage(e.getMessage());
             run.setCompletedAt(LocalDateTime.now());
+            run.setDurationMs(Duration.between(run.getCreatedAt(), run.getCompletedAt()).toMillis());
             agentRunRepository.save(run);
+
+            workflowLogger.logError("AI_RUN_FAILED", run.getTraceId(), run.getId(), run.getTicketId(),
+                    run.getRunType() != null ? run.getRunType().name() : null, e.getMessage());
             // The REQUEST_REVISION decision/comment is already persisted on the
             // superseded checkpoint above — checkpoint history is preserved.
             throw new HitlValidationException(
@@ -161,8 +189,11 @@ public class HumanReviewDecisionService {
 
         int nextCheckpointNumber = pending.getCheckpointNumber() + 1;
         CheckpointSnapshot revisedCheckpoint = checkpointService.createRevisedCheckpoint(
-                run.getId(), run.getTicketId(), nextCheckpointNumber,
+                run.getId(), run.getTicketId(), run.getTraceId(), nextCheckpointNumber,
                 safeWrite(revisedDraft), pending.getSerializedPromptJson(), pending.getToolTraceSnapshotJson());
+
+        workflowLogger.logEvent("CHECKPOINT_CREATED", run.getTraceId(), run.getId(), run.getTicketId(),
+                run.getRunType() != null ? run.getRunType().name() : null, "PENDING", null);
 
         run.setStatus(AgentRunStatus.WAITING_FOR_HUMAN);
         agentRunRepository.save(run);

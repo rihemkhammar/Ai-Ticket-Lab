@@ -53,7 +53,7 @@ class AgentReviewCheckpointServiceTest {
     @DisplayName("createInitialCheckpoint creates checkpoint #1 as PENDING")
     void createInitialCheckpoint_createsPendingCheckpointNumberOne() {
         CheckpointSnapshot snapshot = service.createInitialCheckpoint(
-                RUN_ID, TICKET_ID, "{\"draft\":true}", "{\"prompt\":true}", "[{\"tool\":\"lookup\"}]");
+                RUN_ID, TICKET_ID, "trace-1", "{\"draft\":true}", "{\"prompt\":true}", "[{\"tool\":\"lookup\"}]");
 
         assertThat(snapshot.getCheckpointNumber()).isEqualTo(1);
         assertThat(snapshot.getStatus()).isEqualTo(ReviewCheckpointStatus.PENDING);
@@ -71,7 +71,7 @@ class AgentReviewCheckpointServiceTest {
     @DisplayName("createRevisedCheckpoint creates a new checkpoint at the given (incremented) number")
     void createRevisedCheckpoint_createsCheckpointAtGivenNumber() {
         CheckpointSnapshot snapshot = service.createRevisedCheckpoint(
-                RUN_ID, TICKET_ID, 2, "{\"draft\":\"revised\"}", "{\"prompt\":true}", "[]");
+                RUN_ID, TICKET_ID, "trace-1", 2, "{\"draft\":\"revised\"}", "{\"prompt\":true}", "[]");
 
         assertThat(snapshot.getCheckpointNumber()).isEqualTo(2);
         assertThat(snapshot.getStatus()).isEqualTo(ReviewCheckpointStatus.PENDING);

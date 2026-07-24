@@ -15,6 +15,8 @@ import com.genai.java.spring.agent.tool.dto.RecommendationBoundaryResult;
 import com.genai.java.spring.agent.tool.dto.TicketEvidenceResult;
 import com.genai.java.spring.agent.tool.dto.TicketLookupResult;
 import com.genai.java.spring.aireview.dto.Confidence;
+import com.genai.java.spring.observability.AiTraceIdGenerator;
+import com.genai.java.spring.observability.AiWorkflowLogger;
 import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
 import com.genai.java.spring.ticket.Ticket;
 import com.genai.java.spring.ticket.TicketNotFoundException;
@@ -70,7 +72,8 @@ class TicketAgentInvestigationServiceTest {
                 chatClient, ticketService, ticketLookupTool, ticketEvidenceTool,
                 previousAiReviewTool, boundaryTool, promptBuilder,
                 new PromptInjectionGuard(), validator,
-                agentRunRepository, agentToolCallRepository, new ObjectMapper()
+                agentRunRepository, agentToolCallRepository, new ObjectMapper(),
+                new AiTraceIdGenerator(), new AiWorkflowLogger()
         );
         Ticket ticket = mock(Ticket.class);
         lenient().when(ticket.getId()).thenReturn(TICKET_ID);
@@ -79,14 +82,20 @@ class TicketAgentInvestigationServiceTest {
         lenient().when(ticket.getStatus()).thenReturn(TicketStatus.OPEN);
         lenient().when(ticketService.findById(TICKET_ID)).thenReturn(ticket);
 
-        // agentRunRepository.save() always returns a mock we can assert
-        // setStatus()/setErrorMessage()/setResultJson() calls against.
-        savedRun = mock(AgentRun.class);
-        lenient().when(savedRun.getId()).thenReturn(100L);
-        lenient().when(savedRun.getTicketId()).thenReturn(TICKET_ID);
-        lenient().when(savedRun.getPromptVersion()).thenReturn("ticket-agent-investigation-v1");
-        lenient().when(savedRun.getModelName()).thenReturn("openai/gpt-oss-20b");
-        lenient().when(savedRun.getCreatedAt()).thenReturn(LocalDateTime.now());
+        // agentRunRepository.save() always returns a spy over a *real* AgentRun so that
+        // setStatus()/setErrorMessage()/setResultJson() calls from the service actually
+        // mutate state (a plain mock would silently drop them and getStatus() etc. would
+        // keep returning whatever was stubbed, not what the service set) — while still
+        // letting the tests use verify(savedRun)... below.
+        savedRun = spy(new AgentRun());
+        org.springframework.test.util.ReflectionTestUtils.setField(savedRun, "id", 100L);
+        savedRun.setTicketId(TICKET_ID);
+        savedRun.setPromptVersion("ticket-agent-investigation-v1");
+        savedRun.setModelName("openai/gpt-oss-20b");
+        savedRun.setCreatedAt(LocalDateTime.now());
+        savedRun.setTraceId("trace-1");
+        savedRun.setRunType(AgentRunType.AGENT_INVESTIGATION);
+        savedRun.setStatus(AgentRunStatus.RUNNING);
         lenient().when(agentRunRepository.save(any(AgentRun.class))).thenReturn(savedRun);
 
         lenient().when(agentToolCallRepository.save(any(AgentToolCall.class)))

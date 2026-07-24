@@ -19,6 +19,8 @@ import com.genai.java.spring.hitl.dto.HitlDraft;
 import com.genai.java.spring.hitl.dto.HitlReviewRequest;
 import com.genai.java.spring.hitl.dto.HitlReviewResponse;
 import com.genai.java.spring.hitl.prompt.AgentPromptStateSerializer;
+import com.genai.java.spring.observability.AiTraceIdGenerator;
+import com.genai.java.spring.observability.AiWorkflowLogger;
 import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
 import com.genai.java.spring.shared.advisor.PromptInjectionGuard;
 import com.genai.java.spring.ticket.Ticket;
@@ -44,7 +46,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- *  HitlAgentReviewService: creates a RUNNING run, executes the M4
+ *  HitlAgentReviewService: creates a RUNNING run,
  * read-only tool chain, drafts a recommendation, and pauses at a persisted
  * PENDING checkpoint (WAITING_FOR_HUMAN). Never finalizes by itself.
  */
@@ -79,7 +81,8 @@ class HitlAgentReviewServiceTest {
                 previousAiReviewTool, boundaryTool, promptBuilder,
                 new PromptInjectionGuard(), validator,
                 agentRunRepository, agentToolCallRepository,
-                checkpointService, promptStateSerializer, new ObjectMapper()
+                checkpointService, promptStateSerializer, new ObjectMapper(),
+                new AiTraceIdGenerator(), new AiWorkflowLogger()
         );
 
         Ticket ticket = mock(Ticket.class);
@@ -121,7 +124,7 @@ class HitlAgentReviewServiceTest {
         lenient().when(promptStateSerializer.serialize(any(), any(), any(), any(), any()))
                 .thenReturn("{\"userGoal\":\"...\"}");
 
-        lenient().when(checkpointService.createInitialCheckpoint(anyLong(), eq(TICKET_ID), anyString(), anyString(), anyString()))
+        lenient().when(checkpointService.createInitialCheckpoint(anyLong(), eq(TICKET_ID), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(pendingSnapshot());
     }
 
@@ -199,7 +202,7 @@ class HitlAgentReviewServiceTest {
         assertThat(response.getCheckpointStatus()).isEqualTo(ReviewCheckpointStatus.PENDING);
         assertThat(response.getNeedsHumanReview()).isTrue();
 
-        verify(checkpointService).createInitialCheckpoint(eq(100L), eq(TICKET_ID), anyString(), anyString(), anyString());
+        verify(checkpointService).createInitialCheckpoint(eq(100L), eq(TICKET_ID), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
