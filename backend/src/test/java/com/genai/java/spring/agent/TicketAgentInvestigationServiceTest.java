@@ -22,6 +22,10 @@ import com.genai.java.spring.ticket.Ticket;
 import com.genai.java.spring.ticket.TicketNotFoundException;
 import com.genai.java.spring.ticket.TicketService;
 import com.genai.java.spring.ticket.TicketStatus;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.time.LocalDateTime;
@@ -66,8 +71,23 @@ class TicketAgentInvestigationServiceTest {
 
     private AgentRun savedRun;
 
+    private ListAppender<ILoggingEvent> workflowAppender;
+    private Logger workflowTargetLogger;
+    private ListAppender<ILoggingEvent> serviceAppender;
+    private Logger serviceTargetLogger;
+
     @BeforeEach
     void setUp() {
+        workflowTargetLogger = (Logger) LoggerFactory.getLogger(AiWorkflowLogger.class);
+        workflowAppender = new ListAppender<>();
+        workflowAppender.start();
+        workflowTargetLogger.addAppender(workflowAppender);
+
+        serviceTargetLogger = (Logger) LoggerFactory.getLogger(TicketAgentInvestigationService.class);
+        serviceAppender = new ListAppender<>();
+        serviceAppender.start();
+        serviceTargetLogger.addAppender(serviceAppender);
+
         service = new TicketAgentInvestigationService(
                 chatClient, ticketService, ticketLookupTool, ticketEvidenceTool,
                 previousAiReviewTool, boundaryTool, promptBuilder,
@@ -115,6 +135,20 @@ class TicketAgentInvestigationServiceTest {
         lenient().when(promptBuilder.buildTaskPrompt(any(), anyString(), any(), any(), any(), any()))
                 .thenReturn("task");
         lenient().when(promptBuilder.version()).thenReturn("ticket-agent-investigation-v1");
+    }
+
+    @AfterEach
+    void tearDown() {
+        workflowTargetLogger.detachAppender(workflowAppender);
+        serviceTargetLogger.detachAppender(serviceAppender);
+    }
+
+    private List<String> workflowLogLines() {
+        return workflowAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    }
+
+    private List<String> serviceLogLines() {
+        return serviceAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
     }
 
     private EvidenceChunkResponse evidence() {
@@ -267,5 +301,75 @@ class TicketAgentInvestigationServiceTest {
         // The only interaction the service has with TicketService is read-only lookups.
         verify(ticketService, atLeastOnce()).findById(TICKET_ID);
         verifyNoMoreInteractions(ticketService);
+    }
+
+    // ── trace propagation / structured logging ──────────────────────────────
+
+    @Test
+    @DisplayName("the run's traceId propagates unchanged to every persisted tool call")
+    void investigate_traceIdPropagatesToPersistedToolCalls() {
+        stubChatClientEntity(validSynthesis());
+        doNothing().when(validator).validate(any(), any());
+
+        service.investigate(TICKET_ID, new TicketAgentInvestigationRequest());
+
+        String generatedTraceId = savedRun.getTraceId();
+        assertThat(generatedTraceId).isNotBlank();
+
+        ArgumentCaptor<AgentToolCall> toolCallCaptor = ArgumentCaptor.forClass(AgentToolCall.class);
+        verify(agentToolCallRepository, times(4)).save(toolCallCaptor.capture());
+        assertThat(toolCallCaptor.getAllValues())
+                .extracting(AgentToolCall::getTraceId)
+                .containsOnly(generatedTraceId);
+    }
+
+    @Test
+    @DisplayName("every tool call emits a TOOL_CALL_STARTED and matching TOOL_CALL_COMPLETED event with the run's traceId")
+    void investigate_emitsToolCallStartedAndCompletedEvents() {
+        stubChatClientEntity(validSynthesis());
+        doNothing().when(validator).validate(any(), any());
+
+        service.investigate(TICKET_ID, new TicketAgentInvestigationRequest());
+
+        List<String> lines = workflowLogLines();
+        long startedCount = lines.stream().filter(l -> l.contains("event=TOOL_CALL_STARTED")).count();
+        long completedCount = lines.stream().filter(l -> l.contains("event=TOOL_CALL_COMPLETED")).count();
+
+        assertThat(startedCount).isEqualTo(4);
+        assertThat(completedCount).isEqualTo(4);
+        assertThat(lines).allSatisfy(l -> assertThat(l).contains("traceId=" + savedRun.getTraceId()));
+    }
+
+    @Test
+    @DisplayName("a failing tool still emits a TOOL_CALL_COMPLETED event with FAILED status")
+    void investigate_toolFailure_emitsToolCallCompletedFailedEvent() {
+        when(ticketEvidenceTool.retrieve(any(Ticket.class), anyInt()))
+                .thenThrow(new AgentToolException("Evidence retrieval unavailable."));
+
+        service.investigate(TICKET_ID, new TicketAgentInvestigationRequest());
+
+        List<String> lines = workflowLogLines();
+        assertThat(lines).anySatisfy(l -> assertThat(l)
+                .contains("event=TOOL_CALL_COMPLETED")
+                .contains("status=FAILED"));
+    }
+
+    @Test
+    @DisplayName("AI synthesis content never appears in the AiWorkflowLogger or service log output")
+    void investigate_neverLogsSynthesisContent() {
+        TicketAgentSynthesisResult synthesis = validSynthesis();
+        String distinctiveMarker = "XyZ-DISTINCTIVE-SYNTHESIS-TEXT-77";
+        synthesis.setDraftTechnicianResponse(distinctiveMarker);
+        stubChatClientEntity(synthesis);
+        doNothing().when(validator).validate(any(), any());
+
+        service.investigate(TICKET_ID, new TicketAgentInvestigationRequest());
+
+        for (String line : workflowLogLines()) {
+            assertThat(line).doesNotContain(distinctiveMarker);
+        }
+        for (String line : serviceLogLines()) {
+            assertThat(line).doesNotContain(distinctiveMarker);
+        }
     }
 }

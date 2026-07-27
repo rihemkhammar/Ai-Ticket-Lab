@@ -41,32 +41,41 @@ export default function TraceModalContent({ trace, error }) {
       </Section>
 
       {trace.toolCalls?.length > 0 && (
-        <Section title="Tool Calls">
-          {trace.toolCalls.map((tc, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 12px', borderRadius: '10px', marginBottom: '6px',
-              background: tc.status === 'SUCCESS' ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)',
-              border: `1px solid ${tc.status === 'SUCCESS' ? 'rgba(74,222,128,0.25)' : 'rgba(248,113,113,0.25)'}`,
-            }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', fontFamily: 'monospace' }}>
-                <TbTool size={12} style={{ marginRight: '6px', verticalAlign: 'middle' }} />{tc.toolName}
+  <Section title="Tool Calls">
+    {trace.toolCalls.map((tc, i) => (
+      <div key={i} style={{
+        padding: '8px 12px', borderRadius: '10px', marginBottom: '6px',
+        background: tc.status === 'SUCCESS' ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)',
+        border: `1px solid ${tc.status === 'SUCCESS' ? 'rgba(74,222,128,0.25)' : 'rgba(248,113,113,0.25)'}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', fontFamily: 'monospace' }}>
+            <TbTool size={12} style={{ marginRight: '6px', verticalAlign: 'middle' }} />{tc.toolName}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {tc.durationMs != null && (
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <TbClock size={11} /> {tc.durationMs} ms
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {tc.durationMs != null && (
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                    <TbClock size={11} /> {tc.durationMs} ms
-                  </span>
-                )}
-                <span style={{ fontSize: '11px', fontWeight: 700, color: tc.status === 'SUCCESS' ? '#4ade80' : '#f87171' }}>
-                  {tc.status}
-                </span>
-              </span>
-            </div>
-          ))}
-        </Section>
-      )}
-
+            )}
+            <span style={{ fontSize: '11px', fontWeight: 700, color: tc.status === 'SUCCESS' ? '#4ade80' : '#f87171' }}>
+              {tc.status}
+            </span>
+          </span>
+        </div>
+        {tc.status !== 'SUCCESS' && tc.errorMessage && (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: '5px',
+            fontSize: '11px', color: '#f87171', marginTop: '6px', lineHeight: 1.4,
+          }}>
+            <TbAlertTriangle size={12} style={{ marginTop: '1px', flexShrink: 0 }} />
+            <span>{tc.errorMessage}</span>
+          </div>
+        )}
+      </div>
+    ))}
+  </Section>
+)}
       {trace.checkpoints?.length > 0 && (
         <Section title="Human Review Checkpoints">
           {trace.checkpoints.map((cp, i) => {

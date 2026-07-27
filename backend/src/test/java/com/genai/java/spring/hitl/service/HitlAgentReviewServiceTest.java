@@ -27,6 +27,10 @@ import com.genai.java.spring.ticket.Ticket;
 import com.genai.java.spring.ticket.TicketNotFoundException;
 import com.genai.java.spring.ticket.TicketService;
 import com.genai.java.spring.ticket.TicketStatus;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,6 +38,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -74,8 +79,23 @@ class HitlAgentReviewServiceTest {
 
     private AgentRun savedRun;
 
+    private ListAppender<ILoggingEvent> workflowAppender;
+    private Logger workflowTargetLogger;
+    private ListAppender<ILoggingEvent> serviceAppender;
+    private Logger serviceTargetLogger;
+
     @BeforeEach
     void setUp() {
+        workflowTargetLogger = (Logger) LoggerFactory.getLogger(AiWorkflowLogger.class);
+        workflowAppender = new ListAppender<>();
+        workflowAppender.start();
+        workflowTargetLogger.addAppender(workflowAppender);
+
+        serviceTargetLogger = (Logger) LoggerFactory.getLogger(HitlAgentReviewService.class);
+        serviceAppender = new ListAppender<>();
+        serviceAppender.start();
+        serviceTargetLogger.addAppender(serviceAppender);
+
         service = new HitlAgentReviewService(
                 chatClient, ticketService, ticketLookupTool, ticketEvidenceTool,
                 previousAiReviewTool, boundaryTool, promptBuilder,
@@ -126,6 +146,20 @@ class HitlAgentReviewServiceTest {
 
         lenient().when(checkpointService.createInitialCheckpoint(anyLong(), eq(TICKET_ID), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(pendingSnapshot());
+    }
+
+    @AfterEach
+    void tearDown() {
+        workflowTargetLogger.detachAppender(workflowAppender);
+        serviceTargetLogger.detachAppender(serviceAppender);
+    }
+
+    private List<String> workflowLogLines() {
+        return workflowAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    }
+
+    private List<String> serviceLogLines() {
+        return serviceAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
     }
 
     private EvidenceChunkResponse evidence() {
@@ -206,6 +240,58 @@ class HitlAgentReviewServiceTest {
     }
 
     @Test
+    @DisplayName("the single traceId generated for the run propagates unchanged to every persisted tool call and to the checkpoint")
+    void startReview_traceIdPropagatesToToolCallsAndCheckpoint() {
+        stubChatClientEntity(validDraft());
+        doNothing().when(validator).validate(any(), any());
+
+        HitlReviewResponse response = service.startReview(TICKET_ID, new HitlReviewRequest());
+
+        // Capture the traceId actually generated and stamped on the RUNNING agent_run —
+        // not a value re-typed by the test — so this test would fail if a future change
+        // broke propagation (e.g. by generating a fresh id per tool call, or passing null).
+        ArgumentCaptor<AgentRun> runCaptor = ArgumentCaptor.forClass(AgentRun.class);
+        verify(agentRunRepository, atLeastOnce()).save(runCaptor.capture());
+        String generatedTraceId = runCaptor.getAllValues().get(0).getTraceId();
+        assertThat(generatedTraceId).isNotBlank();
+
+        ArgumentCaptor<AgentToolCall> toolCallCaptor = ArgumentCaptor.forClass(AgentToolCall.class);
+        verify(agentToolCallRepository, times(4)).save(toolCallCaptor.capture());
+        assertThat(toolCallCaptor.getAllValues())
+                .extracting(AgentToolCall::getTraceId)
+                .containsOnly(generatedTraceId);
+
+        ArgumentCaptor<String> checkpointTraceIdCaptor = ArgumentCaptor.forClass(String.class);
+        verify(checkpointService).createInitialCheckpoint(eq(100L), eq(TICKET_ID),
+                checkpointTraceIdCaptor.capture(), anyString(), anyString(), anyString());
+        assertThat(checkpointTraceIdCaptor.getValue()).isEqualTo(generatedTraceId);
+
+        assertThat(response.getRunId()).isEqualTo(100L);
+    }
+
+    @Test
+    @DisplayName("the generated traceId still propagates to the tool calls persisted before a failed run stops")
+    void startReview_failedRun_traceIdStillPropagatesToPersistedToolCalls() {
+        when(ticketEvidenceTool.retrieve(any(Ticket.class), anyInt()))
+                .thenThrow(new AgentToolException("Evidence retrieval unavailable."));
+
+        service.startReview(TICKET_ID, new HitlReviewRequest());
+
+        ArgumentCaptor<AgentRun> runCaptor = ArgumentCaptor.forClass(AgentRun.class);
+        verify(agentRunRepository, atLeastOnce()).save(runCaptor.capture());
+        String generatedTraceId = runCaptor.getAllValues().get(0).getTraceId();
+        assertThat(generatedTraceId).isNotBlank();
+
+        // Lookup tool ran (SUCCESS) then evidence tool ran (FAILED); both tool-call
+        // records persisted before the run failed must still carry the same traceId.
+        ArgumentCaptor<AgentToolCall> toolCallCaptor = ArgumentCaptor.forClass(AgentToolCall.class);
+        verify(agentToolCallRepository, times(2)).save(toolCallCaptor.capture());
+        assertThat(toolCallCaptor.getAllValues())
+                .extracting(AgentToolCall::getTraceId)
+                .containsOnly(generatedTraceId);
+    }
+
+    @Test
     @DisplayName("HITL draft always requests human review even if the model omits the flag")
     void startReview_draftIncludesNeedsHumanReview() {
         HitlDraft draft = validDraft();
@@ -282,5 +368,44 @@ class HitlAgentReviewServiceTest {
 
         verify(ticketService, atLeastOnce()).findById(TICKET_ID);
         verifyNoMoreInteractions(ticketService);
+    }
+
+    // ── structured logging / observability ──────────────────────────────────
+
+    @Test
+    @DisplayName("every tool call emits a TOOL_CALL_STARTED and matching TOOL_CALL_COMPLETED event with the run's traceId")
+    void startReview_emitsToolCallStartedAndCompletedEvents() {
+        stubChatClientEntity(validDraft());
+        doNothing().when(validator).validate(any(), any());
+
+        service.startReview(TICKET_ID, new HitlReviewRequest());
+
+        List<String> lines = workflowLogLines();
+        long startedCount = lines.stream().filter(l -> l.contains("event=TOOL_CALL_STARTED")).count();
+        long completedCount = lines.stream().filter(l -> l.contains("event=TOOL_CALL_COMPLETED")).count();
+
+        assertThat(startedCount).isEqualTo(4);
+        assertThat(completedCount).isEqualTo(4);
+        assertThat(lines.stream().filter(l -> l.contains("event=TOOL_CALL_COMPLETED")))
+                .allSatisfy(l -> assertThat(l).contains("status=SUCCESS"));
+    }
+
+    @Test
+    @DisplayName("draft/synthesis content never appears in the AiWorkflowLogger or service log output")
+    void startReview_neverLogsDraftContent() {
+        HitlDraft draft = validDraft();
+        String distinctiveMarker = "XyZ-DISTINCTIVE-DRAFT-TEXT-42";
+        draft.setDraftTechnicianResponse(distinctiveMarker);
+        stubChatClientEntity(draft);
+        doNothing().when(validator).validate(any(), any());
+
+        service.startReview(TICKET_ID, new HitlReviewRequest());
+
+        for (String line : workflowLogLines()) {
+            assertThat(line).doesNotContain(distinctiveMarker);
+        }
+        for (String line : serviceLogLines()) {
+            assertThat(line).doesNotContain(distinctiveMarker);
+        }
     }
 }

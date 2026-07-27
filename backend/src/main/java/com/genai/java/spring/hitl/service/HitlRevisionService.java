@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 
 /**
  * Generates a revised HITL draft from the previous draft + human comment,
- * with a single malformed-JSON retry (S5 §6.4 / §6.5).
+ * with a single malformed-JSON retry .
  *
  * Flow:
  *  1. Ask GPT to revise using the normal prompt.
@@ -39,9 +39,9 @@ public class HitlRevisionService {
     private final ObjectMapper objectMapper;
 
     public HitlRevisionService(@Qualifier("openAIChatClient") ChatClient chatClient,
-                                HitlRevisionPromptBuilder promptBuilder,
-                                AgentOutputValidator validator,
-                                ObjectMapper objectMapper) {
+                               HitlRevisionPromptBuilder promptBuilder,
+                               AgentOutputValidator validator,
+                               ObjectMapper objectMapper) {
         this.chatClient = chatClient;
         this.promptBuilder = promptBuilder;
         this.validator = validator;
@@ -77,7 +77,8 @@ public class HitlRevisionService {
                 // only keep referencing the evidence already cited by the previous draft.
                 validator.validate(toSynthesis(draft), knownEvidence);
 
-                log.info("HITL revised draft parsed for ticketId={} attempt={} -> {}", ticketId, attempt, draft);
+                log.info("HITL revised draft parsed for ticketId={} attempt={} confidence={} needsHumanReview={}",
+                        ticketId, attempt, draft.getConfidence(), draft.getNeedsHumanReview());
                 return draft;
 
             } catch (AgentValidationException e) {

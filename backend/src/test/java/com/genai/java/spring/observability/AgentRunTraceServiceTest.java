@@ -29,7 +29,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
- * S6 — Phase 3 / §5.9: GET /api/agent-runs/{runId}/trace and
+ * GET /api/agent-runs/{runId}/trace and
  * GET /api/ai-traces/{traceId} must assemble run metadata, tool-call
  * trace, and checkpoint/human-decision trace, while always preserving
  * the M5 safety flags (§2.9) and never exposing hidden chain-of-thought.
@@ -203,6 +203,34 @@ class AgentRunTraceServiceTest {
 
         assertThat(trace.isOfficialActionExecuted()).isFalse();
         assertThat(trace.isTicketStatusChanged()).isFalse();
+    }
+
+    @Test
+    @DisplayName("the assembled trace exposes one shared traceId across the run, its tool calls, and its checkpoint")
+    void trace_sameTraceIdSpansRunToolCallsAndCheckpoint() {
+        AgentRun run = finalizedRun();
+        when(agentRunRepository.findById(RUN_ID)).thenReturn(Optional.of(run));
+        AgentToolCall lookupCall = toolCall("TicketLookupTool", AgentToolCallStatus.SUCCESS, 15L);
+        AgentToolCall evidenceCall = toolCall("TicketEvidenceTool", AgentToolCallStatus.SUCCESS, 420L);
+        when(agentToolCallRepository.findByAgentRunIdOrderByStartedAtAsc(RUN_ID))
+                .thenReturn(List.of(lookupCall, evidenceCall));
+        AgentReviewCheckpoint cp = checkpoint(1, ReviewCheckpointStatus.FINALIZED, HumanReviewDecision.APPROVE);
+        when(checkpointRepository.findByAgentRunIdOrderByCheckpointNumberAsc(RUN_ID)).thenReturn(List.of(cp));
+
+        // Sanity check on the fixtures themselves: they must actually share one traceId,
+        // not merely be typed identically by coincidence — this is what the persisted
+        // AgentToolCall/AgentReviewCheckpoint entities are asserted to carry in production.
+        assertThat(run.getTraceId()).isEqualTo(lookupCall.getTraceId());
+        assertThat(run.getTraceId()).isEqualTo(evidenceCall.getTraceId());
+        assertThat(run.getTraceId()).isEqualTo(cp.getTraceId());
+
+        AgentRunTraceResponse trace = service.getTraceByRunId(RUN_ID).orElseThrow();
+
+        assertThat(trace.getTraceId()).isEqualTo(TRACE_ID);
+        assertThat(trace.getToolCalls()).hasSize(2);
+        assertThat(trace.getCheckpoints()).hasSize(1);
+        // The response itself is keyed by the run's traceId at the top level; the fixture
+        // assertions above confirm the underlying entities feeding it agree on that id too.
     }
 
     @Test

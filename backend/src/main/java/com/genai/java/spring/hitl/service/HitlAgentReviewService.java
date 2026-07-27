@@ -180,7 +180,8 @@ public class HitlAgentReviewService {
                         .user(taskPrompt)
                         .call()
                         .entity(HitlDraft.class);
-                log.info("HITL draft parsed for ticketId={} -> {}", ticketId, draft);
+                log.info("HITL draft parsed for ticketId={} confidence={} needsHumanReview={}",
+                        ticketId, draft.getConfidence(), draft.getNeedsHumanReview());
             } catch (Exception e) {
                 log.error("HITL GPT draft generation failed for ticketId={}", ticketId, e);
                 return failRun(run, "AI provider failed or returned invalid output.", traceForResponse);
@@ -325,20 +326,28 @@ public class HitlAgentReviewService {
     private <T> T runTool(Long runId, String traceId, String toolName, Long ticketId,
                           ToolCall<T> call, List<AgentToolCallTrace> traceForResponse) {
         LocalDateTime startedAt = LocalDateTime.now();
+        workflowLogger.logEvent("TOOL_CALL_STARTED", traceId, runId, ticketId, toolName,
+                "RUNNING", null);
         try {
             T output = call.execute();
             LocalDateTime completedAt = LocalDateTime.now();
+            long durationMs = Duration.between(startedAt, completedAt).toMillis();
             persistToolCall(runId, traceId, toolName, ticketId, output, AgentToolCallStatus.SUCCESS, null,
                     startedAt, completedAt);
             traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.SUCCESS.name(), null,
                     startedAt, completedAt));
+            workflowLogger.logEvent("TOOL_CALL_COMPLETED", traceId, runId, ticketId, toolName,
+                    AgentToolCallStatus.SUCCESS.name(), durationMs);
             return output;
         } catch (AgentToolException e) {
             LocalDateTime completedAt = LocalDateTime.now();
+            long durationMs = Duration.between(startedAt, completedAt).toMillis();
             persistToolCall(runId, traceId, toolName, ticketId, null, AgentToolCallStatus.FAILED, e.getMessage(),
                     startedAt, completedAt);
             traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.FAILED.name(), e.getMessage(),
                     startedAt, completedAt));
+            workflowLogger.logEvent("TOOL_CALL_COMPLETED", traceId, runId, ticketId, toolName,
+                    AgentToolCallStatus.FAILED.name(), durationMs);
             throw e;
         }
     }
