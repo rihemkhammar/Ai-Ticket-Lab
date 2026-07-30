@@ -56,6 +56,52 @@ public class TriageGraphState {
      */
     private List<TriageTreatedItem> treated = new ArrayList<>();
 
+    // -- extended pipeline fields (Triage -> Investigation -> Review ->
+    // Rules -> HITL). Popped by DispatchNextTicketNode, carried through
+    // the following nodes for the single ticket currently in flight. --
+
+    /**
+     * Ticket id currently flowing through Investigation/Review/Rules/HITL,
+     * or null when no ticket is being processed (start, or between loops).
+     */
+    private Long currentTicketId;
+
+    /**
+     * Result of Agent 2 (Investigation) for currentTicketId, set by
+     * InvestigationNode and read by ReviewNode.
+     */
+    private Object currentInvestigationResult;
+
+    /**
+     * Result of Agent 3 (Review/grounding) for currentTicketId, set by
+     * ReviewNode and read by RulesNode.
+     */
+    private Object currentReviewResult;
+
+    /**
+     * Deterministic routing decision for currentTicketId, set by
+     * RulesNode and read by HitlCheckpointNode.
+     */
+    private Object currentRoutingDecision;
+
+    /**
+     * Error captured by any pipeline stage for currentTicketId, used by
+     * each node to record a FAILED treated entry without aborting the
+     * batch (Rule 2.7).
+     */
+    private String currentStageError;
+
+    /**
+     * Username of the technician who launched this triage batch (from
+     * Authentication.getName() on the controller). Used by ReviewNode as
+     * the "requester" for TicketRagReviewService.runRagReview, instead of
+     * a fictitious system account that would need to exist in the users
+     * table. Left null in tests / any caller that builds a state without
+     * it — ReviewNode falls back to its own fixed system identifier in
+     * that case (see ReviewNode.TRIAGE_SYSTEM_REQUESTER).
+     */
+    private String requesterUsername;
+
     public TriageGraphState(Long triageRunId, List<Long> ticketQueue) {
         this.triageRunId = triageRunId;
         this.ticketQueue = new ArrayList<>(ticketQueue);
