@@ -274,7 +274,12 @@ export const submitHumanDecision = async (runId, decision, comment) => {
   });
   return response.data;
 };
-
+ 
+// GET /api/agent-runs/:runId/trace — trace complète du run 
+export const getAgentRunTrace = async (runId) => {
+  const response = await api.get(`/api/agent-runs/${runId}/trace`);
+  return response.data;
+};
 
 
 export default api;

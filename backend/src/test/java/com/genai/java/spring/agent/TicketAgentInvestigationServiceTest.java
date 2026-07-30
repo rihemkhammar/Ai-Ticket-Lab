@@ -15,11 +15,17 @@ import com.genai.java.spring.agent.tool.dto.RecommendationBoundaryResult;
 import com.genai.java.spring.agent.tool.dto.TicketEvidenceResult;
 import com.genai.java.spring.agent.tool.dto.TicketLookupResult;
 import com.genai.java.spring.aireview.dto.Confidence;
+import com.genai.java.spring.observability.AiTraceIdGenerator;
+import com.genai.java.spring.observability.AiWorkflowLogger;
 import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
 import com.genai.java.spring.ticket.Ticket;
 import com.genai.java.spring.ticket.TicketNotFoundException;
 import com.genai.java.spring.ticket.TicketService;
 import com.genai.java.spring.ticket.TicketStatus;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.time.LocalDateTime;
@@ -64,13 +71,29 @@ class TicketAgentInvestigationServiceTest {
 
     private AgentRun savedRun;
 
+    private ListAppender<ILoggingEvent> workflowAppender;
+    private Logger workflowTargetLogger;
+    private ListAppender<ILoggingEvent> serviceAppender;
+    private Logger serviceTargetLogger;
+
     @BeforeEach
     void setUp() {
+        workflowTargetLogger = (Logger) LoggerFactory.getLogger(AiWorkflowLogger.class);
+        workflowAppender = new ListAppender<>();
+        workflowAppender.start();
+        workflowTargetLogger.addAppender(workflowAppender);
+
+        serviceTargetLogger = (Logger) LoggerFactory.getLogger(TicketAgentInvestigationService.class);
+        serviceAppender = new ListAppender<>();
+        serviceAppender.start();
+        serviceTargetLogger.addAppender(serviceAppender);
+
         service = new TicketAgentInvestigationService(
                 chatClient, ticketService, ticketLookupTool, ticketEvidenceTool,
                 previousAiReviewTool, boundaryTool, promptBuilder,
                 new PromptInjectionGuard(), validator,
-                agentRunRepository, agentToolCallRepository, new ObjectMapper()
+                agentRunRepository, agentToolCallRepository, new ObjectMapper(),
+                new AiTraceIdGenerator(), new AiWorkflowLogger()
         );
         Ticket ticket = mock(Ticket.class);
         lenient().when(ticket.getId()).thenReturn(TICKET_ID);
@@ -79,14 +102,20 @@ class TicketAgentInvestigationServiceTest {
         lenient().when(ticket.getStatus()).thenReturn(TicketStatus.OPEN);
         lenient().when(ticketService.findById(TICKET_ID)).thenReturn(ticket);
 
-        // agentRunRepository.save() always returns a mock we can assert
-        // setStatus()/setErrorMessage()/setResultJson() calls against.
-        savedRun = mock(AgentRun.class);
-        lenient().when(savedRun.getId()).thenReturn(100L);
-        lenient().when(savedRun.getTicketId()).thenReturn(TICKET_ID);
-        lenient().when(savedRun.getPromptVersion()).thenReturn("ticket-agent-investigation-v1");
-        lenient().when(savedRun.getModelName()).thenReturn("openai/gpt-oss-20b");
-        lenient().when(savedRun.getCreatedAt()).thenReturn(LocalDateTime.now());
+        // agentRunRepository.save() always returns a spy over a *real* AgentRun so that
+        // setStatus()/setErrorMessage()/setResultJson() calls from the service actually
+        // mutate state (a plain mock would silently drop them and getStatus() etc. would
+        // keep returning whatever was stubbed, not what the service set) — while still
+        // letting the tests use verify(savedRun)... below.
+        savedRun = spy(new AgentRun());
+        org.springframework.test.util.ReflectionTestUtils.setField(savedRun, "id", 100L);
+        savedRun.setTicketId(TICKET_ID);
+        savedRun.setPromptVersion("ticket-agent-investigation-v1");
+        savedRun.setModelName("openai/gpt-oss-20b");
+        savedRun.setCreatedAt(LocalDateTime.now());
+        savedRun.setTraceId("trace-1");
+        savedRun.setRunType(AgentRunType.AGENT_INVESTIGATION);
+        savedRun.setStatus(AgentRunStatus.RUNNING);
         lenient().when(agentRunRepository.save(any(AgentRun.class))).thenReturn(savedRun);
 
         lenient().when(agentToolCallRepository.save(any(AgentToolCall.class)))
@@ -106,6 +135,20 @@ class TicketAgentInvestigationServiceTest {
         lenient().when(promptBuilder.buildTaskPrompt(any(), anyString(), any(), any(), any(), any()))
                 .thenReturn("task");
         lenient().when(promptBuilder.version()).thenReturn("ticket-agent-investigation-v1");
+    }
+
+    @AfterEach
+    void tearDown() {
+        workflowTargetLogger.detachAppender(workflowAppender);
+        serviceTargetLogger.detachAppender(serviceAppender);
+    }
+
+    private List<String> workflowLogLines() {
+        return workflowAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    }
+
+    private List<String> serviceLogLines() {
+        return serviceAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
     }
 
     private EvidenceChunkResponse evidence() {
@@ -258,5 +301,75 @@ class TicketAgentInvestigationServiceTest {
         // The only interaction the service has with TicketService is read-only lookups.
         verify(ticketService, atLeastOnce()).findById(TICKET_ID);
         verifyNoMoreInteractions(ticketService);
+    }
+
+    // ── trace propagation / structured logging ──────────────────────────────
+
+    @Test
+    @DisplayName("the run's traceId propagates unchanged to every persisted tool call")
+    void investigate_traceIdPropagatesToPersistedToolCalls() {
+        stubChatClientEntity(validSynthesis());
+        doNothing().when(validator).validate(any(), any());
+
+        service.investigate(TICKET_ID, new TicketAgentInvestigationRequest());
+
+        String generatedTraceId = savedRun.getTraceId();
+        assertThat(generatedTraceId).isNotBlank();
+
+        ArgumentCaptor<AgentToolCall> toolCallCaptor = ArgumentCaptor.forClass(AgentToolCall.class);
+        verify(agentToolCallRepository, times(4)).save(toolCallCaptor.capture());
+        assertThat(toolCallCaptor.getAllValues())
+                .extracting(AgentToolCall::getTraceId)
+                .containsOnly(generatedTraceId);
+    }
+
+    @Test
+    @DisplayName("every tool call emits a TOOL_CALL_STARTED and matching TOOL_CALL_COMPLETED event with the run's traceId")
+    void investigate_emitsToolCallStartedAndCompletedEvents() {
+        stubChatClientEntity(validSynthesis());
+        doNothing().when(validator).validate(any(), any());
+
+        service.investigate(TICKET_ID, new TicketAgentInvestigationRequest());
+
+        List<String> lines = workflowLogLines();
+        long startedCount = lines.stream().filter(l -> l.contains("event=TOOL_CALL_STARTED")).count();
+        long completedCount = lines.stream().filter(l -> l.contains("event=TOOL_CALL_COMPLETED")).count();
+
+        assertThat(startedCount).isEqualTo(4);
+        assertThat(completedCount).isEqualTo(4);
+        assertThat(lines).allSatisfy(l -> assertThat(l).contains("traceId=" + savedRun.getTraceId()));
+    }
+
+    @Test
+    @DisplayName("a failing tool still emits a TOOL_CALL_COMPLETED event with FAILED status")
+    void investigate_toolFailure_emitsToolCallCompletedFailedEvent() {
+        when(ticketEvidenceTool.retrieve(any(Ticket.class), anyInt()))
+                .thenThrow(new AgentToolException("Evidence retrieval unavailable."));
+
+        service.investigate(TICKET_ID, new TicketAgentInvestigationRequest());
+
+        List<String> lines = workflowLogLines();
+        assertThat(lines).anySatisfy(l -> assertThat(l)
+                .contains("event=TOOL_CALL_COMPLETED")
+                .contains("status=FAILED"));
+    }
+
+    @Test
+    @DisplayName("AI synthesis content never appears in the AiWorkflowLogger or service log output")
+    void investigate_neverLogsSynthesisContent() {
+        TicketAgentSynthesisResult synthesis = validSynthesis();
+        String distinctiveMarker = "XyZ-DISTINCTIVE-SYNTHESIS-TEXT-77";
+        synthesis.setDraftTechnicianResponse(distinctiveMarker);
+        stubChatClientEntity(synthesis);
+        doNothing().when(validator).validate(any(), any());
+
+        service.investigate(TICKET_ID, new TicketAgentInvestigationRequest());
+
+        for (String line : workflowLogLines()) {
+            assertThat(line).doesNotContain(distinctiveMarker);
+        }
+        for (String line : serviceLogLines()) {
+            assertThat(line).doesNotContain(distinctiveMarker);
+        }
     }
 }

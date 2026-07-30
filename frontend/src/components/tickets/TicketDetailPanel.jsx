@@ -6,6 +6,7 @@ import {
   updateTicketStatus, runAiReview, runRagReview, getTicketEvidence, runAgentInvestigation,
   getLatestAiReview, getLatestRagReview, getLatestAgentRun,
   getLatestHitlReview, runHitlReview, submitHumanDecision,
+  getAgentRunTrace,
 } from '../../services/api';
 
 import { AiReviewPanel, AiReviewModalContent } from './reviews/AiReviewTab';
@@ -14,6 +15,8 @@ import { EvidencePanel, EvidenceModalContent } from './reviews/EvidenceTab';
 import { AgentPanel, AgentModalContent } from './reviews/AgentTab';
 import { HitlPanel } from './hitl/HitlPanel';
 import { HitlModalContent } from './hitl/Hitlmodalcontent';
+import TraceButton from './trace/TraceButton';
+import TraceModalContent from './trace/TraceModalContent';
 
 const TABS = ['AI Review', 'RAG Review', 'Evidence', 'Agent', 'HITL'];
 
@@ -42,6 +45,11 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
   const [hitlError,       setHitlError]       = useState(null);
   const [hitlDeciding,    setHitlDeciding]     = useState(null); // 'APPROVE'|'REJECT'|'REQUEST_REVISION'|null
 
+  const [traceResult,     setTraceResult]     = useState(null);
+  const [traceLoading,    setTraceLoading]    = useState(false);
+  const [traceError,      setTraceError]      = useState(null);
+  const [traceModalOpen,  setTraceModalOpen]  = useState(false);
+
   // On ticket change, reload any previously-stored results from
   // the backend instead of just wiping them to null. Evidence is cheap to
   // recompute live and isn't persisted, so it stays reset until the user
@@ -55,6 +63,7 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
     setAgentError(null);    setAgentLoading(false);
     setHitlResult(null);
     setHitlError(null);     setHitlLoading(false); setHitlDeciding(null);
+    setTraceResult(null);   setTraceError(null);   setTraceLoading(false); setTraceModalOpen(false);
     setModalOpen(false);
     setActiveTab('AI Review');
 
@@ -177,6 +186,21 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
     } catch (err) {
       setHitlError(err.response?.data?.message ?? 'The human decision failed.');
     } finally { setHitlDeciding(null); }
+  };
+
+  const handleViewTrace = async (runId) => {
+    if (!runId) return;
+    setTraceLoading(true); setTraceError(null); setTraceResult(null);
+    try {
+      const data = await getAgentRunTrace(runId);
+      setTraceResult(data);
+      setTraceModalOpen(true);
+    } catch (err) {
+      setTraceError(err.response?.data?.message ?? 'Could not load the AI trace.');
+      setTraceModalOpen(true);
+    } finally {
+      setTraceLoading(false);
+    }
   };
 
   const hasResult = {
@@ -325,24 +349,34 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
         )}
 
         {activeTab === 'Agent' && (
-          <AgentPanel
-            agentLoading={agentLoading}
-            agentError={agentError}
-            agentResult={agentResult}
-            onRun={handleAgentInvestigation}
-            onOpen={() => setModalOpen(true)}
-          />
+          <>
+            <AgentPanel
+              agentLoading={agentLoading}
+              agentError={agentError}
+              agentResult={agentResult}
+              onRun={handleAgentInvestigation}
+              onOpen={() => setModalOpen(true)}
+            />
+            {agentResult?.runId && (
+              <TraceButton onClick={() => handleViewTrace(agentResult.runId)} loading={traceLoading} />
+            )}
+          </>
         )}
 
         {/* Human-in-the-Loop Agent Review (S5) */}
         {activeTab === 'HITL' && (
-          <HitlPanel
-            hitlLoading={hitlLoading}
-            hitlError={hitlError}
-            hitlResult={hitlResult}
-            onRun={handleRunHitl}
-            onOpen={() => setModalOpen(true)}
-          />
+          <>
+            <HitlPanel
+              hitlLoading={hitlLoading}
+              hitlError={hitlError}
+              hitlResult={hitlResult}
+              onRun={handleRunHitl}
+              onOpen={() => setModalOpen(true)}
+            />
+            {hitlResult?.runId && (
+              <TraceButton onClick={() => handleViewTrace(hitlResult.runId)} loading={traceLoading} />
+            )}
+          </>
         )}
 
       </div>
@@ -416,6 +450,49 @@ export default function TicketDetailPanel({ ticket, onClose, onStatusUpdated }) 
                   onDecide={handleHitlDecide}
                 />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal AI Trace (S6) ── */}
+      {traceModalOpen && (
+        <div
+          onClick={() => setTraceModalOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1100,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid rgba(77,124,199,0.2)',
+              borderRadius: '24px',
+              width: '100%', maxWidth: '700px',
+              maxHeight: '85vh',
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid rgba(77,124,199,0.1)',
+              display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+              flexShrink: 0,
+            }}>
+              <button
+                onClick={() => setTraceModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+              >
+                <TbX size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+              <TraceModalContent trace={traceResult} error={traceError} />
             </div>
           </div>
         </div>

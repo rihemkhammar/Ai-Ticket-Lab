@@ -41,6 +41,13 @@ public class AgentToolCall {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    // ── S6: observability / trace fields ──────────────────────────────
+    @Column(name = "trace_id")
+    private String traceId;
+
+    @Column(name = "duration_ms")
+    private Long durationMs;
+
     public Long getId()                          { return id; }
 
     public Long getAgentRunId()                  { return agentRunId; }
@@ -66,4 +73,10 @@ public class AgentToolCall {
 
     public LocalDateTime getCompletedAt()        { return completedAt; }
     public void setCompletedAt(LocalDateTime v)  { this.completedAt = v; }
+
+    public String getTraceId()                    { return traceId; }
+    public void setTraceId(String v)              { this.traceId = v; }
+
+    public Long getDurationMs()                   { return durationMs; }
+    public void setDurationMs(Long v)             { this.durationMs = v; }
 }

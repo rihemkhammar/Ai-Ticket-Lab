@@ -20,6 +20,8 @@ import com.genai.java.spring.hitl.dto.HitlReviewRequest;
 import com.genai.java.spring.hitl.dto.HitlReviewResponse;
 import com.genai.java.spring.hitl.dto.HumanReviewDecisionRequest;
 import com.genai.java.spring.hitl.prompt.AgentPromptStateSerializer;
+import com.genai.java.spring.observability.AiTraceIdGenerator;
+import com.genai.java.spring.observability.AiWorkflowLogger;
 import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
 import com.genai.java.spring.shared.advisor.PromptInjectionGuard;
 import com.genai.java.spring.ticket.Ticket;
@@ -47,7 +49,7 @@ import static org.mockito.Mockito.*;
 /**
  * Official State Safety Rule: the HITL flow must never mutate the
  * ticket, at any point in the flow (run creation, approve, reject, request
- * revision). This is the single most important safety guardrail of M5.
+ * revision). This is the single most important safety guardrail.
  *
  * HumanReviewDecisionService doesn't even hold a TicketService reference,
  * so mutation is structurally impossible on the decision side; these tests
@@ -90,10 +92,11 @@ class HitlNoMutationTest {
                 previousAiReviewTool, boundaryTool, promptBuilder,
                 new PromptInjectionGuard(), validator,
                 agentRunRepository, agentToolCallRepository,
-                checkpointService, promptStateSerializer, objectMapper
+                checkpointService, promptStateSerializer, objectMapper,
+                new AiTraceIdGenerator(), new AiWorkflowLogger()
         );
         humanReviewDecisionService = new HumanReviewDecisionService(
-                agentRunRepository, checkpointService, revisionService, objectMapper
+                agentRunRepository, checkpointService, revisionService, objectMapper, new AiWorkflowLogger()
         );
 
         Ticket ticket = mock(Ticket.class);
@@ -131,7 +134,7 @@ class HitlNoMutationTest {
                 .thenReturn(validDraft());
         lenient().doNothing().when(validator).validate(any(), any());
 
-        lenient().when(checkpointService.createInitialCheckpoint(anyLong(), eq(TICKET_ID), anyString(), anyString(), anyString()))
+        lenient().when(checkpointService.createInitialCheckpoint(anyLong(), eq(TICKET_ID), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(pendingSnapshot());
     }
 
@@ -215,7 +218,7 @@ class HitlNoMutationTest {
         when(agentRunRepository.findById(RUN_ID)).thenReturn(Optional.of(waitingRun()));
         when(checkpointService.findPendingCheckpoint(RUN_ID)).thenReturn(Optional.of(pendingSnapshot()));
         when(checkpointService.supersedeCheckpoint(eq(500L), anyString())).thenReturn(pendingSnapshot());
-        when(checkpointService.createRevisedCheckpoint(eq(RUN_ID), eq(TICKET_ID), eq(2), anyString(), any(), any()))
+        when(checkpointService.createRevisedCheckpoint(eq(RUN_ID), eq(TICKET_ID), any(), eq(2), anyString(), any(), any()))
                 .thenReturn(pendingSnapshot());
         when(revisionService.generateRevisedDraft(eq(TICKET_ID), anyString(), anyString()))
                 .thenReturn(validDraft());
@@ -238,7 +241,7 @@ class HitlNoMutationTest {
         lenient().when(checkpointService.finalizeCheckpoint(anyLong(), any(), anyString())).thenReturn(pendingSnapshot());
         lenient().when(checkpointService.rejectCheckpoint(anyLong(), anyString())).thenReturn(pendingSnapshot());
         lenient().when(checkpointService.supersedeCheckpoint(anyLong(), anyString())).thenReturn(pendingSnapshot());
-        lenient().when(checkpointService.createRevisedCheckpoint(anyLong(), anyLong(), anyInt(), anyString(), any(), any()))
+        lenient().when(checkpointService.createRevisedCheckpoint(anyLong(), anyLong(), any(), anyInt(), anyString(), any(), any()))
                 .thenReturn(pendingSnapshot());
         lenient().when(revisionService.generateRevisedDraft(anyLong(), anyString(), anyString())).thenReturn(validDraft());
 

@@ -7,12 +7,17 @@ import com.genai.java.spring.aireview.dto.Confidence;
 import com.genai.java.spring.hitl.dto.HitlDraft;
 import com.genai.java.spring.hitl.prompt.HitlRevisionPromptBuilder;
 import com.genai.java.spring.rag.review.dto.EvidenceRef;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.util.List;
@@ -39,9 +44,22 @@ class HitlRevisionServiceTest {
     private static final Long TICKET_ID = 1L;
     private static final String HUMAN_COMMENT = "Please double-check the electrical readings first.";
 
+    private ListAppender<ILoggingEvent> serviceAppender;
+    private Logger serviceTargetLogger;
+
     @BeforeEach
     void setUp() {
+        serviceTargetLogger = (Logger) LoggerFactory.getLogger(HitlRevisionService.class);
+        serviceAppender = new ListAppender<>();
+        serviceAppender.start();
+        serviceTargetLogger.addAppender(serviceAppender);
+
         service = new HitlRevisionService(chatClient, new HitlRevisionPromptBuilder(), validator, new ObjectMapper());
+    }
+
+    @AfterEach
+    void tearDown() {
+        serviceTargetLogger.detachAppender(serviceAppender);
     }
 
     private String previousDraftJson() {
@@ -167,5 +185,22 @@ class HitlRevisionServiceTest {
         List<String> prompts = userPromptCaptor.getAllValues();
         assertThat(prompts.get(0)).doesNotContain("IMPORTANT");
         assertThat(prompts.get(1)).contains("IMPORTANT");
+    }
+
+    @Test
+    @DisplayName("revised draft content never appears in the service log output")
+    void generateRevisedDraft_neverLogsDraftContent() {
+        HitlDraft draft = revisedDraft();
+        String distinctiveMarker = "XyZ-DISTINCTIVE-REVISION-TEXT-13";
+        draft.setDraftTechnicianResponse(distinctiveMarker);
+        stubChatClientReturns(draft);
+        doNothing().when(validator).validate(any(), any());
+
+        service.generateRevisedDraft(TICKET_ID, HUMAN_COMMENT, previousDraftJson());
+
+        List<String> lines = serviceAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+        for (String line : lines) {
+            assertThat(line).doesNotContain(distinctiveMarker);
+        }
     }
 }

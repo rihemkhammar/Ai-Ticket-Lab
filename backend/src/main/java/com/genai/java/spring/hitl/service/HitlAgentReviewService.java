@@ -20,6 +20,8 @@ import com.genai.java.spring.hitl.dto.HitlDraft;
 import com.genai.java.spring.hitl.dto.HitlReviewRequest;
 import com.genai.java.spring.hitl.dto.HitlReviewResponse;
 import com.genai.java.spring.hitl.prompt.AgentPromptStateSerializer;
+import com.genai.java.spring.observability.AiTraceIdGenerator;
+import com.genai.java.spring.observability.AiWorkflowLogger;
 import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
 import com.genai.java.spring.shared.advisor.PromptInjectionGuard;
 import com.genai.java.spring.ticket.Ticket;
@@ -30,6 +32,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,6 +54,9 @@ import java.util.Optional;
  * Unlike TicketAgentInvestigationService, this service NEVER finalizes the
  * run itself — it always stops at the pause point. Finalization only
  * happens later, in HumanReviewDecisionService, after a human decision.
+ *
+ *  every run generates a traceId (propagated to tool calls and the
+ * checkpoint) and stores runType/durationMs for the AI trace endpoint.
  */
 @Slf4j
 @Service
@@ -72,6 +78,8 @@ public class HitlAgentReviewService {
     private final AgentReviewCheckpointService checkpointService;
     private final AgentPromptStateSerializer promptStateSerializer;
     private final ObjectMapper objectMapper;
+    private final AiTraceIdGenerator traceIdGenerator;
+    private final AiWorkflowLogger workflowLogger;
 
     public HitlAgentReviewService(@Qualifier("openAIChatClient") ChatClient chatClient,
                                   TicketService ticketService,
@@ -86,7 +94,9 @@ public class HitlAgentReviewService {
                                   AgentToolCallRepository agentToolCallRepository,
                                   AgentReviewCheckpointService checkpointService,
                                   AgentPromptStateSerializer promptStateSerializer,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  AiTraceIdGenerator traceIdGenerator,
+                                  AiWorkflowLogger workflowLogger) {
         this.chatClient = chatClient;
         this.ticketService = ticketService;
         this.ticketLookupTool = ticketLookupTool;
@@ -100,6 +110,8 @@ public class HitlAgentReviewService {
         this.agentToolCallRepository = agentToolCallRepository;
         this.checkpointService = checkpointService;
         this.promptStateSerializer = promptStateSerializer;
+        this.traceIdGenerator = traceIdGenerator;
+        this.workflowLogger = workflowLogger;
         // Tool-call traces carry LocalDateTime fields; make a defensive copy that
         // is guaranteed to support Java 8 date/time types, rather than relying on
         // the injected ObjectMapper already having jackson-datatype-jsr310
@@ -122,12 +134,17 @@ public class HitlAgentReviewService {
         run.setModelName(MODEL_NAME);
         run.setStatus(AgentRunStatus.RUNNING);
         run.setCreatedAt(LocalDateTime.now());
+        run.setTraceId(traceIdGenerator.generate());
+        run.setRunType(AgentRunType.HITL_AGENT_REVIEW);
         run = agentRunRepository.save(run);
+
+        workflowLogger.logEvent("AI_RUN_STARTED", run.getTraceId(), run.getId(), ticketId,
+                run.getRunType().name(), run.getStatus().name(), null);
 
         List<AgentToolCallTrace> traceForResponse = new ArrayList<>();
 
         try {
-            TicketLookupResult ticketResult = runTool(run.getId(), TicketLookupTool.NAME,
+            TicketLookupResult ticketResult = runTool(run.getId(), run.getTraceId(), TicketLookupTool.NAME,
                     ticketId, () -> ticketLookupTool.lookup(ticketId), traceForResponse);
 
             Ticket ticket = ticketService.findById(ticketId);
@@ -137,19 +154,19 @@ public class HitlAgentReviewService {
                 log.warn("[HitlAgentReviewService] SUSPICIOUS ticketId={} patterns={}", ticketId, injectionFlags);
             }
 
-            TicketEvidenceResult evidenceResult = runTool(run.getId(), TicketEvidenceTool.NAME,
+            TicketEvidenceResult evidenceResult = runTool(run.getId(), run.getTraceId(), TicketEvidenceTool.NAME,
                     ticketId, () -> ticketEvidenceTool.retrieve(ticket, request.getTopK()), traceForResponse);
             List<EvidenceChunkResponse> evidence = evidenceResult.getEvidence();
 
             PreviousAiReviewResult previousReviews;
             if (request.getIncludePreviousReviews()) {
-                previousReviews = runTool(run.getId(), PreviousAiReviewTool.NAME,
+                previousReviews = runTool(run.getId(), run.getTraceId(), PreviousAiReviewTool.NAME,
                         ticketId, () -> previousAiReviewTool.loadRecent(ticketId, 3), traceForResponse);
             } else {
                 previousReviews = PreviousAiReviewResult.of(ticketId, Collections.emptyList());
             }
 
-            RecommendationBoundaryResult boundaries = runTool(run.getId(),
+            RecommendationBoundaryResult boundaries = runTool(run.getId(), run.getTraceId(),
                     TicketRecommendationBoundaryTool.NAME, ticketId, boundaryTool::load, traceForResponse);
 
             String systemPrompt = promptBuilder.buildSystemPrompt();
@@ -163,7 +180,8 @@ public class HitlAgentReviewService {
                         .user(taskPrompt)
                         .call()
                         .entity(HitlDraft.class);
-                log.info("HITL draft parsed for ticketId={} -> {}", ticketId, draft);
+                log.info("HITL draft parsed for ticketId={} confidence={} needsHumanReview={}",
+                        ticketId, draft.getConfidence(), draft.getNeedsHumanReview());
             } catch (Exception e) {
                 log.error("HITL GPT draft generation failed for ticketId={}", ticketId, e);
                 return failRun(run, "AI provider failed or returned invalid output.", traceForResponse);
@@ -182,7 +200,10 @@ public class HitlAgentReviewService {
             String draftJson = safeWrite(draft);
 
             CheckpointSnapshot checkpoint = checkpointService.createInitialCheckpoint(
-                    run.getId(), ticketId, draftJson, serializedPromptJson, toolTraceJson);
+                    run.getId(), ticketId, run.getTraceId(), draftJson, serializedPromptJson, toolTraceJson);
+
+            workflowLogger.logEvent("CHECKPOINT_CREATED", run.getTraceId(), run.getId(), ticketId,
+                    run.getRunType().name(), "PENDING", null);
 
             AgentRun waitingRun = new AgentRun(run);
             waitingRun.setStatus(AgentRunStatus.WAITING_FOR_HUMAN);
@@ -249,7 +270,7 @@ public class HitlAgentReviewService {
         response.setHumanDecision(checkpoint.getHumanDecision());
         response.setHumanComment(checkpoint.getHumanComment());
         // Real human-decision completion time (finalized/rejected/superseded), distinct
-        // from the checkpoint's creation time — null while still PENDING (S5-G05).
+        // from the checkpoint's creation time — null while still PENDING .
         response.setFinalizedAt(checkpoint.getCompletedAt());
         if (checkpoint.getFinalReviewedResultJson() != null) {
             response.setFinalReviewedResult(readFinalResult(checkpoint.getFinalReviewedResultJson()));
@@ -276,7 +297,11 @@ public class HitlAgentReviewService {
         failedRun.setStatus(AgentRunStatus.FAILED);
         failedRun.setErrorMessage(errorMessage);
         failedRun.setCompletedAt(LocalDateTime.now());
+        failedRun.setDurationMs(Duration.between(failedRun.getCreatedAt(), failedRun.getCompletedAt()).toMillis());
         agentRunRepository.save(failedRun);
+
+        workflowLogger.logError("AI_RUN_FAILED", failedRun.getTraceId(), failedRun.getId(), failedRun.getTicketId(),
+                failedRun.getRunType() != null ? failedRun.getRunType().name() : null, errorMessage);
 
         HitlReviewResponse response = new HitlReviewResponse();
         response.setRunId(failedRun.getId());
@@ -298,36 +323,49 @@ public class HitlAgentReviewService {
         }
     }
 
-    private <T> T runTool(Long runId, String toolName, Long ticketId,
+    private <T> T runTool(Long runId, String traceId, String toolName, Long ticketId,
                           ToolCall<T> call, List<AgentToolCallTrace> traceForResponse) {
         LocalDateTime startedAt = LocalDateTime.now();
+        workflowLogger.logEvent("TOOL_CALL_STARTED", traceId, runId, ticketId, toolName,
+                "RUNNING", null);
         try {
             T output = call.execute();
             LocalDateTime completedAt = LocalDateTime.now();
-            persistToolCall(runId, toolName, ticketId, output, AgentToolCallStatus.SUCCESS, null, startedAt);
+            long durationMs = Duration.between(startedAt, completedAt).toMillis();
+            persistToolCall(runId, traceId, toolName, ticketId, output, AgentToolCallStatus.SUCCESS, null,
+                    startedAt, completedAt);
             traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.SUCCESS.name(), null,
                     startedAt, completedAt));
+            workflowLogger.logEvent("TOOL_CALL_COMPLETED", traceId, runId, ticketId, toolName,
+                    AgentToolCallStatus.SUCCESS.name(), durationMs);
             return output;
         } catch (AgentToolException e) {
             LocalDateTime completedAt = LocalDateTime.now();
-            persistToolCall(runId, toolName, ticketId, null, AgentToolCallStatus.FAILED, e.getMessage(), startedAt);
+            long durationMs = Duration.between(startedAt, completedAt).toMillis();
+            persistToolCall(runId, traceId, toolName, ticketId, null, AgentToolCallStatus.FAILED, e.getMessage(),
+                    startedAt, completedAt);
             traceForResponse.add(new AgentToolCallTrace(toolName, AgentToolCallStatus.FAILED.name(), e.getMessage(),
                     startedAt, completedAt));
+            workflowLogger.logEvent("TOOL_CALL_COMPLETED", traceId, runId, ticketId, toolName,
+                    AgentToolCallStatus.FAILED.name(), durationMs);
             throw e;
         }
     }
 
-    private void persistToolCall(Long runId, String toolName, Long ticketId, Object output,
-                                 AgentToolCallStatus status, String errorMessage, LocalDateTime startedAt) {
+    private void persistToolCall(Long runId, String traceId, String toolName, Long ticketId, Object output,
+                                 AgentToolCallStatus status, String errorMessage,
+                                 LocalDateTime startedAt, LocalDateTime completedAt) {
         AgentToolCall call = new AgentToolCall();
         call.setAgentRunId(runId);
+        call.setTraceId(traceId);
         call.setToolName(toolName);
         call.setInputJson(safeWrite(Collections.singletonMap("ticketId", ticketId)));
         call.setOutputJson(output != null ? safeWrite(output) : null);
         call.setStatus(status);
         call.setErrorMessage(errorMessage);
         call.setStartedAt(startedAt);
-        call.setCompletedAt(LocalDateTime.now());
+        call.setCompletedAt(completedAt);
+        call.setDurationMs(Duration.between(startedAt, completedAt).toMillis());
         agentToolCallRepository.save(call);
     }
 
@@ -349,7 +387,7 @@ public class HitlAgentReviewService {
         }
     }
 
-    /** Bridges HitlDraft to the M4 synthesis shape so AgentOutputValidator can be reused unchanged. */
+    /** Bridges HitlDraft to the  synthesis shape so AgentOutputValidator can be reused unchanged. */
     private com.genai.java.spring.agent.dto.TicketAgentSynthesisResult toSynthesis(HitlDraft draft) {
         com.genai.java.spring.agent.dto.TicketAgentSynthesisResult synthesis =
                 new com.genai.java.spring.agent.dto.TicketAgentSynthesisResult();

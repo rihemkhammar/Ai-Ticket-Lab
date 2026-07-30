@@ -9,6 +9,7 @@ import com.genai.java.spring.hitl.HumanReviewDecision;
 import com.genai.java.spring.hitl.ReviewCheckpointStatus;
 import com.genai.java.spring.hitl.dto.CheckpointSnapshot;
 import com.genai.java.spring.hitl.dto.HumanReviewDecisionRequest;
+import com.genai.java.spring.observability.AiWorkflowLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -48,7 +49,7 @@ class HitlStateTransitionTest {
 
     @BeforeEach
     void setUp() {
-        service = new HumanReviewDecisionService(agentRunRepository, checkpointService, revisionService, new ObjectMapper());
+        service = new HumanReviewDecisionService(agentRunRepository, checkpointService, revisionService, new ObjectMapper(), new AiWorkflowLogger());
     }
 
     private AgentRun runWithStatus(AgentRunStatus status) {
@@ -56,6 +57,7 @@ class HitlStateTransitionTest {
         ReflectionTestUtils.setField(run, "id", RUN_ID);
         run.setTicketId(1L);
         run.setStatus(status);
+        run.setCreatedAt(java.time.LocalDateTime.now().minusMinutes(5));
         return run;
     }
 
