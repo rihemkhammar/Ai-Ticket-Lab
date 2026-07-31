@@ -7,7 +7,7 @@ import com.genai.java.spring.rag.review.dto.EvidenceRef;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public class TicketAgentInvestigationResponse {
+public class TicketAgentInvestigationResponse implements java.io.Serializable {
 
     private Long runId;
     private Long ticketId;

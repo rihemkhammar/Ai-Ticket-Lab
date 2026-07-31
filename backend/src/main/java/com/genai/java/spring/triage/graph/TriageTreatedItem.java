@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-public class TriageTreatedItem {
+public class TriageTreatedItem implements java.io.Serializable {
 
     private Long ticketId;
     private TicketCriticality criticality;
@@ -37,14 +37,26 @@ public class TriageTreatedItem {
 
     private LocalDateTime processedAt;
 
+    /**
+     * Result of the deterministic Rules stage (RulesNode) for this ticket —
+     * a com.genai.java.spring.shared.advisor.TicketRoutingRules.RoutingDecision
+     * (ESCALATE_TO_HUMAN_PRIORITY / STANDARD_HUMAN_REVIEW), carried here as
+     * Object to mirror TriageGraphState#currentRoutingDecision and avoid
+     * this DTO depending on the advisor package. Null when an earlier stage
+     * failed before Rules ran (outcome = FAILED).
+     */
+    private Object routingDecision;
+
     public static TriageTreatedItem success(Long ticketId, TicketCriticality criticality,
-                                            Long agentRunId, LocalDateTime processedAt) {
+                                            Long agentRunId, LocalDateTime processedAt,
+                                            Object routingDecision) {
         TriageTreatedItem item = new TriageTreatedItem();
         item.ticketId = ticketId;
         item.criticality = criticality;
         item.agentRunId = agentRunId;
         item.outcome = TriageDispatchOutcome.SUCCESS;
         item.processedAt = processedAt;
+        item.routingDecision = routingDecision;
         return item;
     }
 

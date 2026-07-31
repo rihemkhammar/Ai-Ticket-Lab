@@ -10,7 +10,7 @@ import java.util.List;
 @Getter
 @Setter
 @ToString
-public class TicketRagReviewResponse {
+public class TicketRagReviewResponse implements java.io.Serializable {
 
     private String summary;
     private List<String> possibleCauses;

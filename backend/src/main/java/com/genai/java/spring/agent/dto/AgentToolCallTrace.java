@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * AgentToolCall and is intentionally NOT surfaced here, to avoid exposing
  * internal reasoning payloads to the UI.
  */
-public class AgentToolCallTrace {
+public class AgentToolCallTrace implements java.io.Serializable {
 
     private String toolName;
     private String status;

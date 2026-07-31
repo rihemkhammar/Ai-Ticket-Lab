@@ -48,7 +48,7 @@ public class HitlCheckpointNode {
                     ticketId, classification.getCriticality(),
                     state.getCurrentStageError(), LocalDateTime.now());
         } else {
-            item = createCheckpointAndBuildItem(ticketId, classification);
+            item = createCheckpointAndBuildItem(ticketId, classification, state.getCurrentRoutingDecision());
         }
 
         state.getTreated().add(item);
@@ -58,7 +58,8 @@ public class HitlCheckpointNode {
     }
 
     private TriageTreatedItem createCheckpointAndBuildItem(Long ticketId,
-                                                           TriageClassification classification) {
+                                                           TriageClassification classification,
+                                                           Object routingDecision) {
         try {
             HitlReviewResponse response =
                     hitlAgentReviewService.startReview(ticketId, new HitlReviewRequest());
@@ -74,7 +75,11 @@ public class HitlCheckpointNode {
 
             return TriageTreatedItem.success(
                     ticketId, classification.getCriticality(),
-                    response.getRunId(), LocalDateTime.now());
+                    response.getRunId(), LocalDateTime.now(),
+                    // Set by RulesNode just before this node runs (null only if
+                    // Rules itself never ran, which currentStageError already
+                    // covers in apply() above).
+                    routingDecision);
 
         } catch (Exception e) {
             log.warn("HITL checkpoint creation failed for ticket {}: {}", ticketId, e.getMessage());

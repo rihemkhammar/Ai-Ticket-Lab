@@ -4,6 +4,7 @@ import com.genai.java.spring.agent.AgentRunStatus;
 import com.genai.java.spring.hitl.dto.HitlReviewRequest;
 import com.genai.java.spring.hitl.dto.HitlReviewResponse;
 import com.genai.java.spring.hitl.service.HitlAgentReviewService;
+import com.genai.java.spring.shared.advisor.TicketRoutingRules;
 import com.genai.java.spring.triage.TicketCriticality;
 import com.genai.java.spring.triage.TriageDispatchOutcome;
 import com.genai.java.spring.triage.TriageOrchestratorService;
@@ -47,6 +48,7 @@ class HitlCheckpointNodeTest {
     @DisplayName("apply appends a SUCCESS treated item and persists it when the checkpoint is created")
     void apply_checkpointCreated_recordsSuccess() {
         TriageGraphState state = stateFor(1L, TicketCriticality.HIGH);
+        state.setCurrentRoutingDecision(TicketRoutingRules.RoutingDecision.ESCALATE_TO_HUMAN_PRIORITY);
 
         HitlReviewResponse response = new HitlReviewResponse();
         response.setStatus(AgentRunStatus.WAITING_FOR_HUMAN);
@@ -60,8 +62,25 @@ class HitlCheckpointNodeTest {
         assertThat(item.getTicketId()).isEqualTo(1L);
         assertThat(item.getOutcome()).isEqualTo(TriageDispatchOutcome.SUCCESS);
         assertThat(item.getAgentRunId()).isEqualTo(200L);
+        assertThat(item.getRoutingDecision())
+                .isEqualTo(TicketRoutingRules.RoutingDecision.ESCALATE_TO_HUMAN_PRIORITY);
 
         verify(triageOrchestratorService).recordTreated(eq(50L), eq(1L), any(TriageTreatedItem.class));
+    }
+
+    @Test
+    @DisplayName("apply leaves routingDecision null on success when Rules never set one")
+    void apply_checkpointCreated_noRoutingDecisionSet_leavesItNull() {
+        TriageGraphState state = stateFor(1L, TicketCriticality.LOW);
+
+        HitlReviewResponse response = new HitlReviewResponse();
+        response.setStatus(AgentRunStatus.WAITING_FOR_HUMAN);
+        response.setRunId(201L);
+        when(hitlAgentReviewService.startReview(eq(1L), any(HitlReviewRequest.class))).thenReturn(response);
+
+        TriageGraphState result = node.apply(state);
+
+        assertThat(result.getTreated().get(0).getRoutingDecision()).isNull();
     }
 
     @Test

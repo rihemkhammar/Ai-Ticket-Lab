@@ -1,6 +1,6 @@
 package com.genai.java.spring.rag.retrieval.dto;
 
-public class EvidenceChunkResponse {
+public class EvidenceChunkResponse implements java.io.Serializable {
 
     private String sourceRef;
     private Long articleId;

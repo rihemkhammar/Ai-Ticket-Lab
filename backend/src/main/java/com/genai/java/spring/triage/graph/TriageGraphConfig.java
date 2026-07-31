@@ -1,27 +1,49 @@
 package com.genai.java.spring.triage.graph;
 
+import com.genai.java.spring.triage.TicketCriticality;
+import org.bsc.langgraph4j.GraphStateException;
+import org.bsc.langgraph4j.CompiledGraph;
+import org.bsc.langgraph4j.StateGraph;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.Map;
+import java.util.function.UnaryOperator;
+
+import static org.bsc.langgraph4j.StateGraph.END;
+import static org.bsc.langgraph4j.StateGraph.START;
+import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
+import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 /**
  * Wires the LangGraph4j StateGraph for the triage pipeline:
  *
  *   START -> Classify -> Order -> Dispatch
- *              -> Investigation -> Review -> Rules -> Hitl
+ *              -> (conditional: is the dispatched ticket CRITICAL/HIGH?)
+ *                   -> Investigation -> Review
+ *                   -> Review directly (skip Investigation)
+ *              -> Rules -> Hitl
  *              -> (conditional: orderedQueue non-empty? loop back to
  *                  Dispatch : END)
  *
- * IMPORTANT: the exact langgraph4j-core API (StateGraph/NodeAction/
- * addConditionalEdges signatures) depends on the library version pinned
- * in this project's pom.xml. The method bodies below show the intended
- * wiring using each node's plain apply(TriageGraphState) method; adapt
- * the exact org.bsc.langgraph4j calls to match your installed version's
- * javadoc/README before compiling (Story M7, Phase 1, Section 3.3:
- * "learn from official documentation, no video for this milestone").
+ * This reproduces EXACTLY the manual chaining that used to live in
+ * TriagePipelineService.startAndRun() (including the "skip Agent 2
+ * unless CRITICAL/HIGH" branch), so behavior is unchanged - only the
+ * orchestration mechanism moves from a hand-written while-loop to a
+ * compiled graph.
  *
  * Each node stays a plain, independently unit-testable Spring bean
  * (ClassifyTicketsNode, OrderQueueNode, ...); this class only concerns
- * itself with graph wiring, so tests can cover node logic without ever
- * touching langgraph4j itself (Rule 2.9).
+ * itself with graph wiring (Rule 2.9).
+ *
+ * IMPORTANT (version-sensitive API): this file targets
+ * langgraph4j-core 1.8.20 as pinned in pom.xml. StateGraph is
+ * parameterized by an AgentState (Map<String,Object> + Channel
+ * schema), not by TriageGraphState directly - see TriageAgentState.
+ * The exact invoke(...) call shape used by TriagePipelineService also
+ * changed across releases (Map<String,Object> input + Optional<S>
+ * result vs typed initial state + CompletableFuture<S>) - re-check
+ * against this version's javadoc/README before relying on it blindly.
  */
 @Configuration
 public class TriageGraphConfig {
@@ -50,52 +72,71 @@ public class TriageGraphConfig {
         this.hitlCheckpointNode = hitlCheckpointNode;
     }
 
+    @Bean
+    public CompiledGraph<TriageAgentState> triageGraph() throws GraphStateException {
+        StateGraph<TriageAgentState> graph =
+                new StateGraph<>(TriageAgentState.SCHEMA, TriageAgentState::new);
+
+        graph.addNode("classify", asNode(classifyTicketsNode::apply));
+        graph.addNode("order", asNode(orderQueueNode::apply));
+        graph.addNode("dispatch", asNode(dispatchNextTicketNode::apply));
+        graph.addNode("investigate", asNode(investigationNode::apply));
+        graph.addNode("review", asNode(reviewNode::apply));
+        graph.addNode("rules", asNode(rulesNode::apply));
+        graph.addNode("hitl", asNode(hitlCheckpointNode::apply));
+
+        graph.addEdge(START, "classify");
+        graph.addEdge("classify", "order");
+        graph.addEdge("order", "dispatch");
+
+        // Same branch as TriagePipelineService's old
+        // isCriticalEnoughForInvestigation(state) check.
+        graph.addConditionalEdges("dispatch",
+                edge_async(this::routeAfterDispatch),
+                Map.of("investigate", "investigate",
+                        "review", "review",
+                        "end", END));
+
+        graph.addEdge("investigate", "review");
+        graph.addEdge("review", "rules");
+        graph.addEdge("rules", "hitl");
+
+        // Same loop condition as the old while (state.getCurrentTicketId() != null).
+        graph.addConditionalEdges("hitl",
+                edge_async(state -> state.triageState().hasRemainingTickets() ? "continue" : "end"),
+                Map.of("continue", "dispatch", "end", END));
+
+        return graph.compile();
+    }
+
     /**
-     * TODO (verify against your langgraph4j-core version's real API):
-     *
-     * StateGraph<TriageGraphState> graph =
-     *     new StateGraph<>(TriageGraphState.class, TriageGraphState::new);
-     *
-     * graph.addNode("classify", node_async(classifyTicketsNode::apply));
-     * graph.addNode("order",    node_async(orderQueueNode::apply));
-     * graph.addNode("dispatch", node_async(dispatchNextTicketNode::apply));
-     * graph.addNode("investigate", node_async(investigationNode::apply));
-     * graph.addNode("review",   node_async(reviewNode::apply));
-     * graph.addNode("rules",    node_async(rulesNode::apply));
-     * graph.addNode("hitl",     node_async(hitlCheckpointNode::apply));
-     *
-     * graph.addEdge(START, "classify");
-     * graph.addEdge("classify", "order");
-     * graph.addEdge("order", "dispatch");
-     *
-     * // If dispatch found nothing left to process, go straight to END;
-     * // otherwise walk this ticket through the rest of the pipeline.
-     * graph.addConditionalEdges("dispatch",
-     *     edge_async(state -> state.getCurrentTicketId() != null ? "process" : "end"),
-     *     Map.of("process", "investigate", "end", END));
-     *
-     * graph.addEdge("investigate", "review");
-     * graph.addEdge("review", "rules");
-     * graph.addEdge("rules", "hitl");
-     *
-     * // After hitl, loop back to dispatch while tickets remain.
-     * graph.addConditionalEdges("hitl",
-     *     edge_async(state -> state.hasRemainingTickets() ? "continue" : "end"),
-     *     Map.of("continue", "dispatch", "end", END));
-     *
-     * this.compiledGraph = graph.compile();
+     * Wraps a plain TriageGraphState -> TriageGraphState node (the
+     * existing, already-tested apply(...) methods) into the
+     * AsyncNodeAction<TriageAgentState> shape langgraph4j needs,
+     * without touching any of the 7 node classes themselves.
      */
-    // NOT annotated with @Bean on purpose: a bean that throws at
-    // construction would crash the whole Spring context on startup,
-    // blocking every other unrelated endpoint (M1-M6) while this graph
-    // wiring is still being finished. Turn this into a real @Bean
-    // returning CompiledGraph<TriageGraphState> only once the wiring
-    // above compiles against your langgraph4j-core version - then
-    // inject it into TriageOrchestratorService to replace the Phase 4
-    // TODO left in startBatch().
-    public Object buildCompiledGraphOnceWiringIsFinished() {
-        throw new UnsupportedOperationException(
-                "TriageGraphConfig: wire the real langgraph4j StateGraph here " +
-                        "(see class-level TODO) before calling this method.");
+    private org.bsc.langgraph4j.action.AsyncNodeAction<TriageAgentState> asNode(
+            UnaryOperator<TriageGraphState> nodeLogic) {
+        return node_async(agentState -> {
+            TriageGraphState updated = nodeLogic.apply(agentState.triageState());
+            return Map.of(TriageAgentState.STATE_KEY, updated);
+        });
+    }
+
+    private String routeAfterDispatch(TriageAgentState agentState) {
+        TriageGraphState state = agentState.triageState();
+        if (state.getCurrentTicketId() == null) {
+            return "end";
+        }
+        return isCriticalEnoughForInvestigation(state) ? "investigate" : "review";
+    }
+
+    private boolean isCriticalEnoughForInvestigation(TriageGraphState state) {
+        TriageClassification classification = state.getClassifications().get(state.getCurrentTicketId());
+        if (classification == null || classification.getCriticality() == null) {
+            return false;
+        }
+        return classification.getCriticality() == TicketCriticality.CRITICAL
+                || classification.getCriticality() == TicketCriticality.HIGH;
     }
 }

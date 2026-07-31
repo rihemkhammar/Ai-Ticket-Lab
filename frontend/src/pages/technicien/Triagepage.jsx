@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { TbPlayerPlay, TbRefresh, TbSearch, TbCheck, TbX } from 'react-icons/tb';
 
 import { getAllTickets, startTriageBatch, getTriageBatch } from '../../services/api';
-import { MAX_BATCH_SIZE, RUN_STATUS_CONFIG } from '../../components/triage/Triageconstants';
+import { MAX_BATCH_SIZE, RUN_STATUS_CONFIG, CRITICALITY_CONFIG } from '../../components/triage/Triageconstants';
 import TriageTicketCard from '../../components/triage/TriageTicketCard';
 
 // The pipeline (Classify -> Order -> Dispatch -> Investigation -> Review ->
@@ -200,6 +200,13 @@ export default function TriagePage() {
 
   const canStart = includeAllOpen ? tickets.length > 0 : selectedIds.size > 0;
 
+  const CRITICALITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const classifiedTickets = Object.values(run?.classifications ?? {})
+    .sort((a, b) => {
+      const diff = CRITICALITY_ORDER.indexOf(a.criticality) - CRITICALITY_ORDER.indexOf(b.criticality);
+      return diff !== 0 ? diff : a.ticketId - b.ticketId;
+    });
+
   return (
     <div style={{ padding: '32px', maxWidth: '1200px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
       {/* Header */}
@@ -362,24 +369,33 @@ export default function TriagePage() {
                 <p style={{ fontSize: '13px', color: '#f87171', margin: '0 0 16px' }}>{run.errorMessage}</p>
               )}
 
-              {/* File restante */}
+              {/* Classification (Agent 1) de tous les tickets du batch sélectionné —
+                  même forme que l'ancienne "Remaining queue" (pills en flex-wrap),
+                  mais chaque pill montre désormais la criticité au lieu d'un id nu. */}
               <div style={{ marginBottom: '18px' }}>
                 <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                  Remaining queue ({run.ticketQueue?.length ?? 0})
+                  Classification ({classifiedTickets.length})
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {(run.ticketQueue ?? []).length === 0 ? (
+                  {classifiedTickets.length === 0 ? (
                     <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Empty</span>
                   ) : (
-                    run.ticketQueue.map(id => (
-                      <span key={id} style={{
-                        padding: '3px 10px', borderRadius: '999px',
-                        background: 'var(--bg-input)', border: '1px solid rgba(77,124,199,0.2)',
-                        fontSize: '12px', color: 'var(--text-main)',
-                      }}>
-                        #{id}
-                      </span>
-                    ))
+                    classifiedTickets.map(c => {
+                      const color = CRITICALITY_CONFIG[c.criticality]?.color ?? '#94a3b8';
+                      const label = CRITICALITY_CONFIG[c.criticality]?.label ?? c.criticality;
+                      return (
+                        <span key={c.ticketId} title={c.rationale ?? undefined} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          padding: '3px 10px', borderRadius: '999px',
+                          background: `${color}1a`, border: `1px solid ${color}40`,
+                          fontSize: '12px', color: 'var(--text-main)',
+                        }}>
+                          #{c.ticketId}
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: color }} />
+                          {label}
+                        </span>
+                      );
+                    })
                   )}
                 </div>
               </div>

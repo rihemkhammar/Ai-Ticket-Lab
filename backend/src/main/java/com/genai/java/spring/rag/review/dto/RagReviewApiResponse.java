@@ -6,7 +6,7 @@ import com.genai.java.spring.rag.retrieval.dto.EvidenceChunkResponse;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public class RagReviewApiResponse {
+public class RagReviewApiResponse implements java.io.Serializable {
 
     private Long reviewId;
     private Long ticketId;

@@ -22,7 +22,7 @@ import java.util.Map;
 @Getter
 @Setter
 @NoArgsConstructor
-public class TriageGraphState {
+public class TriageGraphState implements java.io.Serializable {
 
     /**
      * Id of the triage_run row this graph execution belongs to.

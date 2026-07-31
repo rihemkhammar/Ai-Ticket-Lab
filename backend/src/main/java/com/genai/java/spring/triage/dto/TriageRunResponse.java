@@ -1,10 +1,12 @@
 package com.genai.java.spring.triage.dto;
 
 import com.genai.java.spring.triage.TriageRunStatus;
+import com.genai.java.spring.triage.graph.TriageClassification;
 import com.genai.java.spring.triage.graph.TriageTreatedItem;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public class TriageRunResponse {
 
@@ -12,6 +14,7 @@ public class TriageRunResponse {
     private TriageRunStatus status;
     private String promptVersion;
     private List<Long> ticketQueue;
+    private Map<Long, TriageClassification> classifications;
     private List<TriageTreatedItem> treated;
     private String errorMessage;
     private LocalDateTime createdAt;
@@ -30,6 +33,9 @@ public class TriageRunResponse {
 
     public List<Long> getTicketQueue()                   { return ticketQueue; }
     public void setTicketQueue(List<Long> v)             { this.ticketQueue = v; }
+
+    public Map<Long, TriageClassification> getClassifications() { return classifications; }
+    public void setClassifications(Map<Long, TriageClassification> v) { this.classifications = v; }
 
     public List<TriageTreatedItem> getTreated()          { return treated; }
     public void setTreated(List<TriageTreatedItem> v)    { this.treated = v; }

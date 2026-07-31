@@ -7,7 +7,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @ToString
-public class EvidenceRef {
+public class EvidenceRef implements java.io.Serializable {
 
     private String sourceRef;
     private String articleTitle;

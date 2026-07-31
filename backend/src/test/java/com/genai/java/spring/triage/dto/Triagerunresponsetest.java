@@ -19,7 +19,8 @@ class TriageRunResponseTest {
         TriageRunResponse response = new TriageRunResponse();
         LocalDateTime createdAt = LocalDateTime.of(2026, 7, 30, 9, 0);
         LocalDateTime completedAt = LocalDateTime.of(2026, 7, 30, 9, 5);
-        TriageTreatedItem item = TriageTreatedItem.success(1L, TicketCriticality.HIGH, 10L, completedAt);
+        TriageTreatedItem item = TriageTreatedItem.success(1L, TicketCriticality.HIGH, 10L, completedAt,
+                com.genai.java.spring.shared.advisor.TicketRoutingRules.RoutingDecision.STANDARD_HUMAN_REVIEW);
 
         response.setRunId(1L);
         response.setStatus(TriageRunStatus.COMPLETED);

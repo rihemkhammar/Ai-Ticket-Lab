@@ -20,6 +20,13 @@ export const OUTCOME_CONFIG = {
   FAILED:  { label: 'Failed',                     color: '#f87171' },
 };
 
+// Résultat du stage "Rules" (RulesNode.decide, déterministe — pas de LLM).
+// Reflète TicketRoutingRules.RoutingDecision côté back.
+export const ROUTING_DECISION_CONFIG = {
+  ESCALATE_TO_HUMAN_PRIORITY: { label: 'Priority human review', color: '#fb923c' },
+  STANDARD_HUMAN_REVIEW:      { label: 'Standard human review', color: '#60a5fa' },
+};
+
 // Étapes réellement exécutées par TriagePipelineService, dans l'ordre.
 // (OBSERVATION retirée : ce n'était qu'une étape du squelette backend
 // jamais implémentée — le vrai pipeline s'arrête à HITL.)

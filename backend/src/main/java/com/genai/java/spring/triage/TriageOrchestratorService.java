@@ -7,7 +7,9 @@ import com.genai.java.spring.ticket.TicketService;
 import com.genai.java.spring.ticket.TicketStatus;
 import com.genai.java.spring.triage.dto.TriageBatchRequest;
 import com.genai.java.spring.triage.dto.TriageRunResponse;
+import com.genai.java.spring.triage.graph.TriageClassification;
 import com.genai.java.spring.triage.graph.TriageTreatedItem;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -113,6 +115,40 @@ public class TriageOrchestratorService {
     }
 
     /**
+     * Persists the full classification map (ALL tickets of the batch,
+     * not just the one dispatched through the full pipeline) so the
+     * frontend can display the complete ranking. Called once by
+     * TriagePipelineService right after the graph finishes, using the
+     * final state's classifications.
+     */
+    @Transactional
+    public void recordClassifications(Long runId, Map<Long, TriageClassification> classifications) {
+        TriageRun run = triageRunRepository.findById(runId)
+                .orElseThrow(() -> new TriageValidationException("Triage run not found: " + runId));
+        run.setClassificationsJson(writeJson(new ArrayList<>(classifications.values())));
+        run.setUpdatedAt(LocalDateTime.now());
+        triageRunRepository.save(run);
+    }
+
+    /**
+     * Marks a run COMPLETED once the graph has genuinely reached END.
+     * Replaces the old "ticketQueue is empty" heuristic in
+     * recordTreated(), which no longer applies now that OrderQueueNode
+     * only dispatches the single most critical ticket through the full
+     * pipeline — the rest are classified but never "treated", so the
+     * initial ticketQueue never empties on its own.
+     */
+    @Transactional
+    public void markCompleted(Long runId) {
+        TriageRun run = triageRunRepository.findById(runId)
+                .orElseThrow(() -> new TriageValidationException("Triage run not found: " + runId));
+        run.setStatus(TriageRunStatus.COMPLETED);
+        run.setCompletedAt(LocalDateTime.now());
+        run.setUpdatedAt(LocalDateTime.now());
+        triageRunRepository.save(run);
+    }
+
+    /**
      * Atomically moves one ticket from the queue to the treated list.
      * Called by DispatchNextTicketNode / pipeline nodes starting Phase 4,
      * one ticket at a time, right after each stage of the pipeline
@@ -135,11 +171,10 @@ public class TriageOrchestratorService {
         run.setTicketQueue(writeJson(remaining));
         run.setTreatedJson(writeJson(treated));
         run.setUpdatedAt(LocalDateTime.now());
-
-        if (remaining.isEmpty()) {
-            run.setStatus(TriageRunStatus.COMPLETED);
-            run.setCompletedAt(LocalDateTime.now());
-        }
+        // COMPLETED is now set explicitly by markCompleted(), called from
+        // TriagePipelineService once the graph has actually reached END —
+        // not inferred here from "ticketQueue empty", since only the top
+        // ticket ever gets dispatched/treated (see OrderQueueNode).
 
         triageRunRepository.save(run);
     }
@@ -165,6 +200,7 @@ public class TriageOrchestratorService {
         response.setStatus(run.getStatus());
         response.setPromptVersion(run.getPromptVersion());
         response.setTicketQueue(readTicketQueue(run));
+        response.setClassifications(readClassifications(run));
         response.setTreated(readTreated(run));
         response.setErrorMessage(run.getErrorMessage());
         response.setCreatedAt(run.getCreatedAt());
@@ -178,6 +214,11 @@ public class TriageOrchestratorService {
 
     private List<TriageTreatedItem> readTreated(TriageRun run) {
         return readJson(run.getTreatedJson(), TriageTreatedItem.class);
+    }
+
+    private Map<Long, TriageClassification> readClassifications(TriageRun run) {
+        return readJson(run.getClassificationsJson(), TriageClassification.class).stream()
+                .collect(Collectors.toMap(TriageClassification::getTicketId, c -> c));
     }
 
     private <T> String writeJson(List<T> value) {

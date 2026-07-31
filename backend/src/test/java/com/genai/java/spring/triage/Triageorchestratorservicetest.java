@@ -191,7 +191,7 @@ class TriageOrchestratorServiceTest {
         when(triageRunRepository.save(any(TriageRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         TriageTreatedItem item = TriageTreatedItem.success(
-                1L, TicketCriticality.HIGH, 100L, LocalDateTime.now());
+                1L, TicketCriticality.HIGH, 100L, LocalDateTime.now(), null);
 
         service.recordTreated(30L, 1L, item);
 
@@ -207,8 +207,14 @@ class TriageOrchestratorServiceTest {
     }
 
     @Test
-    @DisplayName("recordTreated marks the run COMPLETED once the queue is empty")
-    void recordTreated_lastTicket_marksRunCompleted() throws Exception {
+    @DisplayName("recordTreated no longer auto-completes the run (completion is explicit via markCompleted)")
+    void recordTreated_lastTicket_doesNotAutoCompleteRun() throws Exception {
+        // recordTreated() no longer infers COMPLETED from an empty
+        // ticketQueue: since OrderQueueNode now only ever dispatches the
+        // single most critical ticket, the original batch's ticketQueue
+        // (used for display) would otherwise never empty out. Completion
+        // is now decided explicitly by markCompleted(), called from
+        // TriagePipelineService once the graph has really reached END.
         TriageRun run = new TriageRun();
         org.springframework.test.util.ReflectionTestUtils.setField(run, "id", 31L);
         run.setStatus(TriageRunStatus.RUNNING);
@@ -227,6 +233,26 @@ class TriageOrchestratorServiceTest {
         org.mockito.Mockito.verify(triageRunRepository).save(captor.capture());
 
         TriageRun saved = captor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(TriageRunStatus.RUNNING);
+        assertThat(saved.getCompletedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("markCompleted sets status COMPLETED and completedAt")
+    void markCompleted_setsCompletedStatusAndTimestamp() {
+        TriageRun run = new TriageRun();
+        org.springframework.test.util.ReflectionTestUtils.setField(run, "id", 31L);
+        run.setStatus(TriageRunStatus.RUNNING);
+
+        when(triageRunRepository.findById(31L)).thenReturn(Optional.of(run));
+        when(triageRunRepository.save(any(TriageRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.markCompleted(31L);
+
+        ArgumentCaptor<TriageRun> captor = ArgumentCaptor.forClass(TriageRun.class);
+        org.mockito.Mockito.verify(triageRunRepository).save(captor.capture());
+
+        TriageRun saved = captor.getValue();
         assertThat(saved.getStatus()).isEqualTo(TriageRunStatus.COMPLETED);
         assertThat(saved.getCompletedAt()).isNotNull();
     }
@@ -237,7 +263,7 @@ class TriageOrchestratorServiceTest {
         when(triageRunRepository.findById(999L)).thenReturn(Optional.empty());
 
         TriageTreatedItem item = TriageTreatedItem.success(
-                1L, TicketCriticality.MEDIUM, 1L, LocalDateTime.now());
+                1L, TicketCriticality.MEDIUM, 1L, LocalDateTime.now(), null);
 
         assertThatThrownBy(() -> service.recordTreated(999L, 1L, item))
                 .isInstanceOf(TriageValidationException.class)

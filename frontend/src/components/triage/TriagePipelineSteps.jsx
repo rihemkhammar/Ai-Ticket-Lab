@@ -1,5 +1,5 @@
 import { TbCheck, TbX, TbPointFilled, TbMinus } from 'react-icons/tb';
-import { PIPELINE_STAGES, isInvestigationApplicable } from './Triageconstants';
+import { PIPELINE_STAGES, isInvestigationApplicable, ROUTING_DECISION_CONFIG } from './Triageconstants';
 
 /**
  * Stepper horizontal : Classify -> Order -> Dispatch -> Investigation ->
@@ -15,14 +15,17 @@ import { PIPELINE_STAGES, isInvestigationApplicable } from './Triageconstants';
  * - INVESTIGATION : exécutée seulement si criticality est CRITICAL ou HIGH
  *   (même seuil que TriagePipelineService#isCriticalEnoughForInvestigation) ;
  *   sinon affichée comme "ignorée", pas comme "échouée".
- * - REVIEW / RULES / HITL : marquées "terminées" si outcome === SUCCESS.
+ * - RULES : marquée "terminée" dès que `routingDecision` (résultat réel de
+ *   RulesNode, remonté par le back) est présent — pas déduite de `outcome`,
+ *   qui décrit l'issue de HITL, pas celle de Rules.
+ * - REVIEW / HITL : marquées "terminées" si outcome === SUCCESS.
  *   Si outcome === FAILED, le backend ne dit pas à quelle étape précise ça
  *   s'est arrêté (Rule 2.7 : une seule erreur agrégée, pas de détail par
  *   étape) — on les affiche donc comme "interrompues", sans en désigner une
  *   comme fautive à tort. Le vrai message d'erreur reste affiché sous le
  *   stepper (item.errorMessage) par TriageTicketCard.
  */
-export default function TriagePipelineSteps({ criticality, outcome }) {
+export default function TriagePipelineSteps({ criticality, outcome, routingDecision }) {
   const investigationRan = isInvestigationApplicable(criticality);
   const succeeded = outcome === 'SUCCESS';
   const failed = outcome === 'FAILED';
@@ -30,7 +33,15 @@ export default function TriagePipelineSteps({ criticality, outcome }) {
   const statusFor = (key) => {
     if (key === 'CLASSIFY' || key === 'ORDER' || key === 'DISPATCH') return 'done';
     if (key === 'INVESTIGATION') return investigationRan ? (succeeded || failed ? 'done' : 'pending') : 'skipped';
-    // REVIEW / RULES / HITL
+    if (key === 'RULES') {
+      // Le back ne fait remonter routingDecision que si RulesNode a
+      // réellement tourné (voir HitlCheckpointNode) — indépendamment de
+      // outcome, qui décrit l'issue de HITL, pas celle de Rules.
+      if (routingDecision) return 'done';
+      if (failed) return 'interrupted';
+      return 'pending';
+    }
+    // REVIEW / HITL
     if (succeeded) return 'done';
     if (failed) return 'interrupted';
     return 'pending';
@@ -51,10 +62,15 @@ export default function TriagePipelineSteps({ criticality, outcome }) {
           : status === 'done' ? TbCheck
           : TbPointFilled;
 
+        const rulesTitle = stage.key === 'RULES' && routingDecision
+          ? (ROUTING_DECISION_CONFIG[routingDecision]?.label ?? routingDecision)
+          : undefined;
+
         return (
           <div key={stage.key} style={{ display: 'flex', alignItems: 'center' }}>
             <div
-              title={status === 'skipped' ? 'Skipped — non-critical ticket' : status === 'interrupted' ? 'Pipeline interrupted before or at this step' : undefined}
+              title={rulesTitle
+                ?? (status === 'skipped' ? 'Skipped — non-critical ticket' : status === 'interrupted' ? 'Pipeline interrupted before or at this step' : undefined)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '5px',
                 padding: '4px 9px', borderRadius: '999px',

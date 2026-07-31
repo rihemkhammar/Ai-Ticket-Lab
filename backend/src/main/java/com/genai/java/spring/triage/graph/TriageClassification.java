@@ -12,7 +12,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class TriageClassification {
+public class TriageClassification implements java.io.Serializable {
 
     private Long ticketId;
     private TicketCriticality criticality;

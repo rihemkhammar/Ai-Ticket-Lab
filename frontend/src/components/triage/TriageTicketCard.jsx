@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { TbChevronDown, TbChevronUp, TbX, TbAlertTriangle } from 'react-icons/tb';
 
 import { getAgentRunTrace, getHitlReview, submitHumanDecision } from '../../services/api';
-import { CRITICALITY_CONFIG, OUTCOME_CONFIG, isPendingHumanReview } from './Triageconstants';
+import { CRITICALITY_CONFIG, OUTCOME_CONFIG, ROUTING_DECISION_CONFIG, isPendingHumanReview } from './Triageconstants';
 import { RUN_STATUS_CONFIG as HITL_RUN_STATUS_CONFIG } from '../tickets/hitl/Hitlconstants';
 import TriagePipelineSteps from './TriagePipelineSteps';
 
@@ -185,8 +185,18 @@ export default function TriageTicketCard({ item }) {
             <TriagePipelineSteps
               criticality={item.criticality}
               outcome={item.outcome}
+              routingDecision={item.routingDecision}
             />
           </div>
+
+          {item.routingDecision && (
+            <div style={{ marginBottom: '10px' }}>
+              <Badge
+                label={ROUTING_DECISION_CONFIG[item.routingDecision]?.label ?? item.routingDecision}
+                color={ROUTING_DECISION_CONFIG[item.routingDecision]?.color ?? '#94a3b8'}
+              />
+            </div>
+          )}
 
           {item.errorMessage && <ErrorBox>{item.errorMessage}</ErrorBox>}
 
